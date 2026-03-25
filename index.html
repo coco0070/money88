@@ -244,13 +244,15 @@
     background: var(--surface); border-top: 1px solid var(--border);
     display: grid; grid-template-columns: repeat(4, 1fr);
     padding-bottom: var(--safe-bottom);
-    z-index: 100;
+    z-index: 9999 !important;
+    isolation: isolate;
   }
   .tab-item {
     display: flex; flex-direction: column; align-items: center; justify-content: center;
     gap: 4px; cursor: pointer; border: none; background: none; color: var(--muted);
     font-family: var(--font); font-size: 10px; font-weight: 600; transition: color 0.15s;
-    padding: 8px 4px;
+    padding: 8px 4px; position: relative; z-index: 9999 !important; pointer-events: all !important;
+    -webkit-tap-highlight-color: rgba(91,141,239,0.15);
   }
   .tab-item.active { color: var(--accent); }
   .tab-icon { font-size: 22px; line-height: 1; }
@@ -281,7 +283,7 @@
   <div class="top-bar">
     <div class="top-bar-title">가계부<span>(뱅&찌)</span></div>
     <div class="top-bar-subtitle">너의 분수를 알라</div>
-    <button class="top-bar-month" id="top-month" onclick="openMonthPicker()" style="background:none;border:1px solid var(--border);border-radius:20px;padding:4px 10px;cursor:pointer;display:flex;align-items:center;gap:4px;font-family:var(--font)"></button>
+    <button class="top-bar-month" id="top-month" onclick="openMonthPicker()" style="background:none;border:1px solid var(--border);border-radius:20px;padding:4px 10px;cursor:pointer;display:flex;align-items:center;gap:4px;font-family:var(--font);color:var(--text);font-size:13px;font-weight:500;white-space:nowrap"></button>
     <!-- Month Picker Overlay -->
     <div id="month-overlay" style="display:none;position:fixed;inset:0;background:#00000088;z-index:200;align-items:flex-end" onclick="if(event.target===this)closeMonthPicker()">
       <div style="background:var(--surface);border-radius:20px 20px 0 0;width:100%;padding:20px 20px calc(20px + env(safe-area-inset-bottom,0px));max-height:60vh;overflow-y:auto">
@@ -294,7 +296,7 @@
   <!-- Scroll Content -->
   <div class="scroll-area" style="position:relative">
     <!-- Fountain background -->
-    <div style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none;z-index:0;opacity:0.04;width:320px;height:320px">
+    <div style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none;z-index:0;opacity:0.04;width:320px;height:320px;bottom:calc(var(--tab-h) + var(--safe-bottom))">
       <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" width="320" height="320">
         <!-- Base pool -->
         <ellipse cx="100" cy="175" rx="70" ry="14" fill="#5b8def"/>

@@ -283,12 +283,13 @@
   <div class="top-bar">
     <div class="top-bar-title">가계부<span>(뱅&찌)</span></div>
     <div class="top-bar-subtitle">너의 분수를 알라</div>
-    <button class="top-bar-month" id="top-month" onclick="openMonthPicker()" style="background:none;border:1px solid var(--border);border-radius:20px;padding:4px 10px;cursor:pointer;display:flex;align-items:center;gap:4px;font-family:var(--font);color:var(--text);font-size:13px;font-weight:500;white-space:nowrap"></button>
+    <button class="top-bar-month" id="top-month" onclick="openMonthPicker()" style="background:none;border:1px solid var(--border);border-radius:20px;padding:4px 10px;cursor:pointer;display:flex;align-items:center;gap:4px;font-family:var(--font);color:var(--text);font-size:13px;font-weight:500;white-space:nowrap">2026년 3월 <span style="font-size:10px;opacity:0.6">▼</span></button>
     <!-- Month Picker Overlay -->
     <div id="month-overlay" style="display:none;position:fixed;inset:0;background:#00000088;z-index:200;align-items:flex-end" onclick="if(event.target===this)closeMonthPicker()">
-      <div style="background:var(--surface);border-radius:20px 20px 0 0;width:100%;padding:20px 20px calc(20px + env(safe-area-inset-bottom,0px));max-height:60vh;overflow-y:auto">
+      <div style="background:var(--surface);border-radius:20px 20px 0 0;width:100%;padding:20px 20px calc(20px + env(safe-area-inset-bottom,0px));max-height:75vh;overflow-y:auto;-webkit-overflow-scrolling:touch">
+        <div style="width:40px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 16px;"></div>
         <div style="font-size:15px;font-weight:700;margin-bottom:16px;text-align:center">월 선택</div>
-        <div id="month-picker-list" style="display:flex;flex-direction:column;gap:8px"></div>
+        <div id="month-picker-list" style="display:flex;flex-direction:column;gap:8px;padding-bottom:8px"></div>
       </div>
     </div>
   </div>
@@ -640,7 +641,7 @@ function openCrop(file) {
     };
     img.src = cropOriginalUrl;
   };
-  }
+  reader.readAsDataURL(file);
 }
 
 function initCropBox() {
@@ -827,8 +828,7 @@ async function processImageFromUrl(originalUrl) {
     }
     document.getElementById('ai-loader').classList.remove('show');
     document.getElementById('ai-result').classList.add('show');
-  };
-  reader.readAsDataURL(file);
+  }
 }
 
 function renderAIItems() {

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>가계부 AI</title>
+<title>가계부(뱅&찌)</title>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   :root {
@@ -245,7 +245,7 @@
 
   <!-- Top Bar -->
   <div class="top-bar">
-    <div class="top-bar-title">가계부 <span>AI</span></div>
+    <div class="top-bar-title">가계부<span>(뱅&찌)</span></div>
     <div class="top-bar-month" id="top-month"></div>
   </div>
 
@@ -261,10 +261,12 @@
       </div>
 
       <!-- Camera / Upload -->
-      <label class="cam-btn" for="img-input">
-        📷 영수증 / 카드내역 촬영 또는 업로드
-      </label>
-      <input type="file" accept="image/*" capture="environment" id="img-input" style="display:none" onchange="handleFileSelect(event)">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+        <button class="cam-btn" style="margin-bottom:0;background:var(--accent)" onclick="document.getElementById('img-camera').click()">📷 카메라</button>
+        <button class="cam-btn" style="margin-bottom:0;background:var(--surface2);color:var(--text);border:1px solid var(--border)" onclick="document.getElementById('img-input').click()">🖼️ 갤러리</button>
+      </div>
+      <input type="file" accept="image/*" capture="environment" id="img-camera" style="display:none" onchange="handleFileSelect(event)">
+      <input type="file" accept="image/*" id="img-input" style="display:none" onchange="handleFileSelect(event)">
 
       <div class="upload-zone" id="dropzone" onclick="document.getElementById('img-input').click()">
         <div class="upload-icon">🧾</div>

@@ -856,6 +856,7 @@ async function processImageFromUrl(originalUrl) {
       });
       const data = await res.json();
       text = data.content?.find(b=>b.type==='text')?.text || '';
+      console.log('AI raw response:', text);
       // Try to extract JSON array or object from response
       let clean = text.replace(/```json|```/g,'').trim();
       // Find JSON array or object
@@ -866,7 +867,7 @@ async function processImageFromUrl(originalUrl) {
       let parsed = JSON.parse(clean);
       if (!Array.isArray(parsed)) parsed = parsed.items || [parsed];
       if (!Array.isArray(parsed)) parsed = [parsed];
-      const rawItems = parsed.filter(p => p.amount > 0 || p.merchant);
+      const rawItems = parsed.filter(p => (p.amount > 0) && (p.merchant && p.merchant.trim() !== '' && p.merchant !== '(미입력)'));
       pendingItems = rawItems.map((p,i) => ({
         id: i,
         date: p.date || today(),
@@ -887,14 +888,7 @@ async function processImageFromUrl(originalUrl) {
     } catch(err) {
       console.error('AI error:', err, 'raw response:', text);
       // Show AI result panel with empty state so user can add manually
-      pendingItems = [{
-        id: 0, date: today(), date_ok: false,
-        merchant: '', merchant_ok: false,
-        amount: 0, amount_ok: false,
-        type: 'expense', type_ok: false,
-        category: '기타', category_ok: false,
-        payment: '카드', memo: '', checked: true
-      }];
+      pendingItems = [];
       renderAIItems();
       showToast('⚠️ 자동 인식 실패 - 직접 입력해주세요', 'error');
     }

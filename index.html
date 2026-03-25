@@ -786,6 +786,7 @@ async function processImageFromUrl(originalUrl) {
     const { dataUrl, mimeType } = await compressImage(originalUrl);
     const base64 = dataUrl.split(',')[1];
 
+    let text = '';
     try {
       const res = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
@@ -821,9 +822,16 @@ async function processImageFromUrl(originalUrl) {
         })
       });
       const data = await res.json();
-      const text = data.content?.find(b=>b.type==='text')?.text || '';
-      const clean = text.replace(/\`\`\`json|\`\`\`/g,'').trim();
+      text = data.content?.find(b=>b.type==='text')?.text || '';
+      // Try to extract JSON array or object from response
+      let clean = text.replace(/```json|```/g,'').trim();
+      // Find JSON array or object
+      const arrMatch = clean.match(/\[[\s\S]*\]/);
+      const objMatch = clean.match(/\{[\s\S]*\}/);
+      if (arrMatch) clean = arrMatch[0];
+      else if (objMatch) clean = '{"items":[' + objMatch[0] + ']}';
       let parsed = JSON.parse(clean);
+      if (!Array.isArray(parsed)) parsed = parsed.items || [parsed];
       if (!Array.isArray(parsed)) parsed = [parsed];
       pendingItems = parsed.map((p,i) => ({
         id: i,
@@ -843,8 +851,18 @@ async function processImageFromUrl(originalUrl) {
       }));
       renderAIItems();
     } catch(err) {
-      console.error('AI error:', err, 'raw text:', text);
-      showToast('AI 분석 실패. 직접 입력해주세요. (' + (err.message||'') + ')', 'error');
+      console.error('AI error:', err, 'raw response:', text);
+      // Show AI result panel with empty state so user can add manually
+      pendingItems = [{
+        id: 0, date: today(), date_ok: false,
+        merchant: '', merchant_ok: false,
+        amount: 0, amount_ok: false,
+        type: 'expense', type_ok: false,
+        category: '기타', category_ok: false,
+        payment: '카드', memo: '', checked: true
+      }];
+      renderAIItems();
+      showToast('⚠️ 자동 인식 실패 - 직접 입력해주세요', 'error');
     }
     document.getElementById('ai-loader').classList.remove('show');
     document.getElementById('ai-result').classList.add('show');

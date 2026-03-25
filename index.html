@@ -866,14 +866,15 @@ async function processImageFromUrl(originalUrl) {
       let parsed = JSON.parse(clean);
       if (!Array.isArray(parsed)) parsed = parsed.items || [parsed];
       if (!Array.isArray(parsed)) parsed = [parsed];
-      pendingItems = parsed.map((p,i) => ({
+      const rawItems = parsed.filter(p => p.amount > 0 || p.merchant);
+      pendingItems = rawItems.map((p,i) => ({
         id: i,
         date: p.date || today(),
         date_ok: p.date_ok !== false,
-        merchant: p.merchant || '(미입력)',
-        merchant_ok: p.merchant_ok !== false,
+        merchant: p.merchant || '',
+        merchant_ok: !!(p.merchant && p.merchant_ok !== false),
         amount: p.amount || 0,
-        amount_ok: p.amount_ok !== false,
+        amount_ok: !!(p.amount && p.amount_ok !== false),
         type: p.type || 'expense',
         type_ok: p.type_ok !== false,
         category: CAT_MAP[p.category] || p.category || '기타',
@@ -900,6 +901,17 @@ async function processImageFromUrl(originalUrl) {
     document.getElementById('ai-loader').classList.remove('show');
     document.getElementById('ai-result').classList.add('show');
   }
+}
+
+function updateItemBorder(i) {
+  const item = pendingItems[i];
+  const cards = document.getElementById('ai-items-list').children;
+  if (cards[i]) {
+    cards[i].style.border = '1px solid ' + (needsReview(item) ? 'var(--yellow)' : 'var(--border)');
+  }
+  // Update count text
+  const needsCount = pendingItems.filter(needsReview).length;
+  document.getElementById('ai-count').textContent = pendingItems.length + '건 인식됨' + (needsCount > 0 ? ' · ⚠️ ' + needsCount + '건 확인 필요' : ' · ✅ 모두 확인됨');
 }
 
 function needsReview(item) {
@@ -932,26 +944,26 @@ function renderAIItems() {
         '<input type="checkbox" id="chk-' + i + '" ' + (item.checked ? 'checked' : '') + ' onchange="pendingItems[' + i + '].checked=this.checked" style="width:18px;height:18px;accent-color:var(--accent);flex-shrink:0">' +
         '<div style="flex:1;position:relative">' +
           (!item.merchant_ok ? '<span style="position:absolute;top:-7px;left:6px;font-size:9px;color:var(--yellow);font-weight:700;background:var(--bg);padding:0 3px">⚠️ 확인필요</span>' : '') +
-          '<input type="text" value="' + item.merchant + '" oninput="pendingItems[' + i + '].merchant=this.value;pendingItems[' + i + '].merchant_ok=true;renderAIItems()" style="' + fieldStyle(item.merchant_ok) + 'font-weight:600;font-size:13px">' +
+          '<input type="text" value="' + item.merchant + '" onchange="pendingItems[' + i + '].merchant=this.value;pendingItems[' + i + '].merchant_ok=true;updateItemBorder(' + i + ')" style="' + fieldStyle(item.merchant_ok) + 'font-weight:600;font-size:13px">' +
         '</div>' +
         '<div style="position:relative;flex-shrink:0">' +
           (!item.amount_ok ? '<span style="position:absolute;top:-7px;right:0;font-size:9px;color:var(--yellow);font-weight:700;background:var(--bg);padding:0 3px">⚠️</span>' : '') +
-          '<input type="number" value="' + item.amount + '" oninput="pendingItems[' + i + '].amount=parseFloat(this.value)||0;pendingItems[' + i + '].amount_ok=true;renderAIItems()" style="' + fieldStyle(item.amount_ok) + 'width:100px;text-align:right;font-family:var(--mono);color:' + amtColor + '">' +
+          '<input type="number" value="' + item.amount + '" onchange="pendingItems[' + i + '].amount=parseFloat(this.value)||0;pendingItems[' + i + '].amount_ok=true;updateItemBorder(' + i + ')" style="' + fieldStyle(item.amount_ok) + 'width:100px;text-align:right;font-family:var(--mono);color:' + amtColor + '">' +
         '</div>' +
       '</div>' +
       // Row 2: date + category + type
       '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">' +
         '<div style="position:relative">' +
           (!item.date_ok ? '<span style="position:absolute;top:-7px;left:6px;font-size:9px;color:var(--yellow);font-weight:700;background:var(--bg);padding:0 3px;z-index:1">⚠️날짜</span>' : '') +
-          '<input type="date" value="' + item.date + '" onchange="pendingItems[' + i + '].date=this.value;pendingItems[' + i + '].date_ok=true;renderAIItems()" style="' + fieldStyle(item.date_ok) + '">' +
+          '<input type="date" value="' + item.date + '" onchange="pendingItems[' + i + '].date=this.value;pendingItems[' + i + '].date_ok=true;updateItemBorder(' + i + ')" style="' + fieldStyle(item.date_ok) + '">' +
         '</div>' +
         '<div style="position:relative">' +
           (!item.category_ok ? '<span style="position:absolute;top:-7px;left:6px;font-size:9px;color:var(--yellow);font-weight:700;background:var(--bg);padding:0 3px;z-index:1">⚠️카테고리</span>' : '') +
-          '<select onchange="pendingItems[' + i + '].category=this.value;pendingItems[' + i + '].category_ok=true;renderAIItems()" style="' + fieldStyle(item.category_ok) + '">' + catOptions + '</select>' +
+          '<select onchange="pendingItems[' + i + '].category=this.value;pendingItems[' + i + '].category_ok=true;updateItemBorder(' + i + ')" style="' + fieldStyle(item.category_ok) + '">' + catOptions + '</select>' +
         '</div>' +
         '<div style="position:relative">' +
           (!item.type_ok ? '<span style="position:absolute;top:-7px;left:6px;font-size:9px;color:var(--yellow);font-weight:700;background:var(--bg);padding:0 3px;z-index:1">⚠️유형</span>' : '') +
-          '<select onchange="pendingItems[' + i + '].type=this.value;pendingItems[' + i + '].type_ok=true;renderAIItems()" style="' + fieldStyle(item.type_ok) + '">' +
+          '<select onchange="pendingItems[' + i + '].type=this.value;pendingItems[' + i + '].type_ok=true;updateItemBorder(' + i + ')" style="' + fieldStyle(item.type_ok) + '">' +
             '<option value="expense"' + (item.type==='expense'?' selected':'') + '>💸 지출</option>' +
             '<option value="income"' + (item.type==='income'?' selected':'') + '>💰 수입</option>' +
           '</select>' +

@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>가계부 AI</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0d0f14;
+    --surface: #161920;
+    --surface2: #1e2230;
+    --border: #2a2f3e;
+    --accent: #5b8def;
+    --accent2: #e05c7a;
+    --green: #3dd68c;
+    --yellow: #f5c842;
+    --text: #e8eaf0;
+    --muted: #7a82a0;
+    --font: 'Noto Sans KR', sans-serif;
+    --mono: 'DM Mono', monospace;
+    --tab-h: 68px;
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; overflow: hidden; }
+  body { background: var(--bg); color: var(--text); font-family: var(--font); }
+
+  /* App Shell */
+  .app { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
+
+  /* Top Header */
+  .top-bar {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 20px 12px;
+    padding-top: calc(14px + env(safe-area-inset-top, 0px));
+    display: flex; align-items: center; justify-content: space-between;
+    flex-shrink: 0; z-index: 10;
+  }
+  .top-bar-title { font-size: 18px; font-weight: 700; letter-spacing: -0.5px; }
+  .top-bar-title span { color: var(--accent); }
+  .top-bar-month { font-size: 13px; color: var(--muted); font-weight: 500; }
+
+  /* Scroll Area */
+  .scroll-area {
+    flex: 1; overflow-y: auto; overflow-x: hidden;
+    padding-bottom: calc(var(--tab-h) + var(--safe-bottom) + 12px);
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Pages */
+  .page { display: none; padding: 16px; }
+  .page.active { display: block; }
+
+  /* Summary cards */
+  .cards-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 14px 12px;
+  }
+  .card-label { font-size: 10px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+  .card-value { font-size: 15px; font-weight: 700; font-family: var(--mono); letter-spacing: -0.5px; word-break: break-all; }
+  .card-value.income { color: var(--green); }
+  .card-value.expense { color: var(--accent2); }
+
+  /* Upload zone */
+  .upload-zone {
+    border: 2px dashed var(--border); border-radius: 16px;
+    padding: 32px 20px; text-align: center; cursor: pointer;
+    background: var(--surface); position: relative; overflow: hidden;
+    transition: border-color 0.2s;
+    margin-bottom: 14px;
+  }
+  .upload-zone.drag { border-color: var(--accent); background: #5b8def0a; }
+  .upload-zone input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+  .upload-icon { font-size: 36px; margin-bottom: 10px; }
+  .upload-title { font-size: 15px; font-weight: 600; margin-bottom: 5px; }
+  .upload-sub { font-size: 12px; color: var(--muted); line-height: 1.5; }
+
+  /* Camera button */
+  .cam-btn {
+    width: 100%; padding: 14px; border-radius: 14px;
+    background: var(--accent); color: #fff; font-size: 15px; font-weight: 700;
+    border: none; cursor: pointer; font-family: var(--font);
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    margin-bottom: 14px;
+  }
+
+  /* AI result card */
+  .ai-result {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 16px; padding: 16px; display: none; margin-bottom: 14px;
+  }
+  .ai-result.show { display: block; }
+  .ai-result-header { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; font-weight: 700; font-size: 15px; }
+  .ai-badge { background: var(--accent)22; color: var(--accent); font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 20px; }
+
+  /* Preview image */
+  .preview-img { width: 100%; max-height: 160px; object-fit: contain; border-radius: 10px; margin-bottom: 14px; border: 1px solid var(--border); }
+
+  /* Form */
+  .form-group { margin-bottom: 12px; }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+  label { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 5px; }
+  input, select, textarea {
+    background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    border-radius: 10px; padding: 11px 13px; font-size: 15px; font-family: var(--font);
+    transition: border-color 0.15s; outline: none; width: 100%;
+    -webkit-appearance: none; appearance: none;
+  }
+  input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+
+  .type-toggle { display: grid; grid-template-columns: 1fr 1fr; gap: 0; border-radius: 10px; overflow: hidden; border: 1px solid var(--border); }
+  .type-btn {
+    padding: 11px; text-align: center; font-size: 14px; font-weight: 600;
+    cursor: pointer; border: none; background: var(--bg); color: var(--muted);
+    font-family: var(--font); transition: all 0.15s;
+  }
+  .type-btn.active-income { background: var(--green)22; color: var(--green); }
+  .type-btn.active-expense { background: var(--accent2)22; color: var(--accent2); }
+
+  .btn-full {
+    width: 100%; padding: 14px; border-radius: 14px; font-size: 15px; font-weight: 700;
+    cursor: pointer; border: none; font-family: var(--font); margin-top: 4px;
+  }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-secondary { background: var(--surface2); color: var(--muted); border: 1px solid var(--border); }
+
+  /* Loader */
+  .loader { display: none; align-items: center; justify-content: center; gap: 10px; padding: 20px; color: var(--muted); font-size: 13px; }
+  .loader.show { display: flex; }
+  .spinner { width: 18px; height: 18px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; flex-shrink: 0; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* List page */
+  .filter-scroll { display: flex; gap: 8px; overflow-x: auto; margin-bottom: 14px; padding-bottom: 4px; scrollbar-width: none; }
+  .filter-scroll::-webkit-scrollbar { display: none; }
+  .filter-chip {
+    flex-shrink: 0; padding: 7px 14px; border-radius: 20px; font-size: 12px; font-weight: 600;
+    border: 1px solid var(--border); background: var(--surface); color: var(--muted); cursor: pointer;
+    white-space: nowrap; transition: all 0.15s;
+  }
+  .filter-chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  .entry-list { display: flex; flex-direction: column; gap: 8px; }
+  .entry-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 14px 16px;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .entry-icon {
+    width: 40px; height: 40px; border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; flex-shrink: 0;
+  }
+  .entry-info { flex: 1; min-width: 0; }
+  .entry-merchant { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .entry-meta { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .entry-amount { font-family: var(--mono); font-size: 15px; font-weight: 600; text-align: right; flex-shrink: 0; }
+  .entry-amount.income { color: var(--green); }
+  .entry-amount.expense { color: var(--accent2); }
+  .entry-date-group { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin: 14px 0 8px; }
+
+  /* Swipe delete */
+  .entry-card { position: relative; overflow: hidden; }
+  .delete-btn {
+    position: absolute; right: 0; top: 0; bottom: 0; width: 72px;
+    background: var(--accent2); color: #fff; border: none; cursor: pointer;
+    font-size: 12px; font-weight: 700; font-family: var(--font);
+    display: flex; align-items: center; justify-content: center;
+    transform: translateX(100%); transition: transform 0.2s;
+  }
+  .entry-card.swiped .delete-btn { transform: translateX(0); }
+  .entry-card.swiped .entry-content { transform: translateX(-72px); }
+  .entry-content { transition: transform 0.2s; display: flex; align-items: center; gap: 12px; width: 100%; }
+
+  /* Summary page */
+  .month-scroll { display: flex; gap: 8px; overflow-x: auto; margin-bottom: 16px; padding-bottom: 4px; scrollbar-width: none; }
+  .month-scroll::-webkit-scrollbar { display: none; }
+  .month-chip {
+    flex-shrink: 0; padding: 7px 16px; border-radius: 20px; font-size: 13px; font-weight: 600;
+    border: 1px solid var(--border); background: var(--surface); color: var(--muted); cursor: pointer;
+  }
+  .month-chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  .section-title { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 12px; }
+
+  .chart-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 16px; margin-bottom: 14px; }
+  .bar-group { display: flex; flex-direction: column; gap: 12px; }
+  .bar-item { display: flex; flex-direction: column; gap: 5px; }
+  .bar-top { display: flex; justify-content: space-between; }
+  .bar-label { font-size: 13px; font-weight: 500; }
+  .bar-amount { font-size: 13px; font-family: var(--mono); color: var(--text); }
+  .bar-track { height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 4px; transition: width 0.7s ease; }
+
+  .donut-row { display: flex; align-items: center; gap: 16px; }
+  .donut-legend { flex: 1; display: flex; flex-direction: column; gap: 8px; }
+  .legend-item { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+  .legend-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+  /* Bottom Tab Bar */
+  .tab-bar {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    height: calc(var(--tab-h) + var(--safe-bottom));
+    background: var(--surface); border-top: 1px solid var(--border);
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    padding-bottom: var(--safe-bottom);
+    z-index: 100;
+  }
+  .tab-item {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 4px; cursor: pointer; border: none; background: none; color: var(--muted);
+    font-family: var(--font); font-size: 10px; font-weight: 600; transition: color 0.15s;
+    padding: 8px 4px;
+  }
+  .tab-item.active { color: var(--accent); }
+  .tab-icon { font-size: 22px; line-height: 1; }
+
+  /* Toast */
+  .toast {
+    position: fixed; top: calc(60px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%) translateY(-10px);
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 20px; padding: 10px 18px; font-size: 13px; font-weight: 600;
+    white-space: nowrap; opacity: 0; transition: all 0.3s; z-index: 999; pointer-events: none;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .toast.success { border-color: var(--green); color: var(--green); }
+  .toast.error { border-color: var(--accent2); color: var(--accent2); }
+
+  .empty { text-align: center; padding: 40px 20px; color: var(--muted); font-size: 14px; line-height: 1.8; }
+
+  /* Search input */
+  .search-input-wrap { position: relative; margin-bottom: 12px; }
+  .search-input-wrap input { padding-left: 36px; }
+  .search-icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); font-size: 14px; pointer-events: none; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- Top Bar -->
+  <div class="top-bar">
+    <div class="top-bar-title">가계부 <span>AI</span></div>
+    <div class="top-bar-month" id="top-month"></div>
+  </div>
+
+  <!-- Scroll Content -->
+  <div class="scroll-area">
+
+    <!-- Page: AI Upload -->
+    <div class="page active" id="page-upload">
+      <div class="cards-row">
+        <div class="card"><div class="card-label">수입</div><div class="card-value income" id="stat-income">₩0</div></div>
+        <div class="card"><div class="card-label">지출</div><div class="card-value expense" id="stat-expense">₩0</div></div>
+        <div class="card"><div class="card-label">잔액</div><div class="card-value" id="stat-balance">₩0</div></div>
+      </div>
+
+      <!-- Camera / Upload -->
+      <label class="cam-btn" for="img-input">
+        📷 영수증 / 카드내역 촬영 또는 업로드
+      </label>
+      <input type="file" accept="image/*" capture="environment" id="img-input" style="display:none" onchange="handleFileSelect(event)">
+
+      <div class="upload-zone" id="dropzone" onclick="document.getElementById('img-input').click()">
+        <div class="upload-icon">🧾</div>
+        <div class="upload-title">이미지 파일 선택</div>
+        <div class="upload-sub">갤러리에서 선택하거나<br>파일을 끌어다 놓으세요</div>
+      </div>
+
+      <div class="loader" id="ai-loader"><div class="spinner"></div> AI가 분석하는 중...</div>
+
+      <div class="ai-result" id="ai-result">
+        <div class="ai-result-header"><span>AI 분석 결과</span><span class="ai-badge">AI</span></div>
+        <img id="preview-img" class="preview-img" src="" alt="">
+
+        <div class="form-row">
+          <div class="form-group" style="margin-bottom:0">
+            <label>날짜</label>
+            <input type="date" id="f-date">
+          </div>
+          <div class="form-group" style="margin-bottom:0">
+            <label>금액 (원)</label>
+            <input type="number" id="f-amount" placeholder="0">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>유형</label>
+          <div class="type-toggle">
+            <button class="type-btn active-expense" id="btn-expense" onclick="setType('expense')">💸 지출</button>
+            <button class="type-btn" id="btn-income" onclick="setType('income')">💰 수입</button>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>상호명 / 내용</label>
+          <input type="text" id="f-merchant" placeholder="예: 스타벅스">
+        </div>
+
+        <div class="form-row">
+          <div class="form-group" style="margin-bottom:0">
+            <label>카테고리</label>
+            <select id="f-category">
+              <option>식비</option><option>카페/음료</option><option>교통</option>
+              <option>쇼핑</option><option>의료/건강</option><option>문화/여가</option>
+              <option>통신</option><option>공과금</option><option>급여</option>
+              <option>기타수입</option><option>기타</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin-bottom:0">
+            <label>결제수단</label>
+            <select id="f-payment">
+              <option>카드</option><option>현금</option><option>계좌이체</option><option>기타</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>메모</label>
+          <input type="text" id="f-memo" placeholder="메모 (선택)">
+        </div>
+
+        <button class="btn-full btn-primary" onclick="saveEntry()">✅ 저장하기</button>
+        <button class="btn-full btn-secondary" style="margin-top:8px" onclick="cancelAI()">취소</button>
+      </div>
+    </div>
+
+    <!-- Page: Manual -->
+    <div class="page" id="page-manual">
+      <div class="form-group">
+        <label>유형</label>
+        <div class="type-toggle">
+          <button class="type-btn active-expense" id="m-btn-expense" onclick="setMType('expense')">💸 지출</button>
+          <button class="type-btn" id="m-btn-income" onclick="setMType('income')">💰 수입</button>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group" style="margin-bottom:0">
+          <label>날짜</label>
+          <input type="date" id="m-date">
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label>금액 (원)</label>
+          <input type="number" id="m-amount" placeholder="0" inputmode="numeric">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>상호명 / 내용</label>
+        <input type="text" id="m-merchant" placeholder="예: 스타벅스, 월급">
+      </div>
+
+      <div class="form-row">
+        <div class="form-group" style="margin-bottom:0">
+          <label>카테고리</label>
+          <select id="m-category">
+            <option>식비</option><option>카페/음료</option><option>교통</option>
+            <option>쇼핑</option><option>의료/건강</option><option>문화/여가</option>
+            <option>통신</option><option>공과금</option><option>급여</option>
+            <option>기타수입</option><option>기타</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label>결제수단</label>
+          <select id="m-payment">
+            <option>카드</option><option>현금</option><option>계좌이체</option><option>기타</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>메모</label>
+        <input type="text" id="m-memo" placeholder="메모 (선택)">
+      </div>
+
+      <button class="btn-full btn-primary" onclick="saveManual()">➕ 추가하기</button>
+    </div>
+
+    <!-- Page: List -->
+    <div class="page" id="page-list">
+      <div class="search-input-wrap">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="filter-search" placeholder="검색..." oninput="renderList()">
+      </div>
+      <div class="filter-scroll" id="filter-scroll">
+        <button class="filter-chip active" onclick="setMonthFilter(this, '')">전체</button>
+      </div>
+      <div class="filter-scroll">
+        <button class="filter-chip active" data-type="" onclick="setTypeFilter(this, '')">전체</button>
+        <button class="filter-chip" data-type="income" onclick="setTypeFilter(this, 'income')">💰 수입</button>
+        <button class="filter-chip" data-type="expense" onclick="setTypeFilter(this, 'expense')">💸 지출</button>
+      </div>
+      <div class="entry-list" id="entry-list"></div>
+      <div class="empty" id="list-empty" style="display:none">내역이 없어요 🗂️<br><small>영수증을 찍거나 직접 입력해보세요</small></div>
+    </div>
+
+    <!-- Page: Summary -->
+    <div class="page" id="page-summary">
+      <div class="month-scroll" id="month-tabs"></div>
+      <div class="cards-row">
+        <div class="card"><div class="card-label">수입</div><div class="card-value income" id="s-income">₩0</div></div>
+        <div class="card"><div class="card-label">지출</div><div class="card-value expense" id="s-expense">₩0</div></div>
+        <div class="card"><div class="card-label">순수익</div><div class="card-value" id="s-net">₩0</div></div>
+      </div>
+
+      <div class="chart-card">
+        <div class="section-title">카테고리별 지출</div>
+        <div class="bar-group" id="bar-chart"></div>
+      </div>
+
+      <div class="chart-card">
+        <div class="section-title">지출 비중</div>
+        <div class="donut-row">
+          <svg width="110" height="110" viewBox="0 0 120 120" id="donut-svg"></svg>
+          <div class="donut-legend" id="donut-legend"></div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- end scroll-area -->
+
+  <!-- Bottom Tab Bar -->
+  <nav class="tab-bar">
+    <button class="tab-item active" onclick="showPage('upload')"><span class="tab-icon">📸</span>AI입력</button>
+    <button class="tab-item" onclick="showPage('manual')"><span class="tab-icon">✏️</span>직접입력</button>
+    <button class="tab-item" onclick="showPage('list')"><span class="tab-icon">📋</span>내역</button>
+    <button class="tab-item" onclick="showPage('summary')"><span class="tab-icon">📊</span>요약</button>
+  </nav>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ---- Data ----
+let entries = JSON.parse(localStorage.getItem('budget_entries') || '[]');
+let currentType = 'expense';
+let currentMType = 'expense';
+let filterMonth = '';
+let filterType = '';
+let selectedSummaryMonth = thisMonth();
+
+const CAT_COLORS = {
+  '식비':'#5b8def','카페/음료':'#f5c842','교통':'#3dd68c',
+  '쇼핑':'#e05c7a','의료/건강':'#a78bfa','문화/여가':'#fb923c',
+  '통신':'#22d3ee','공과금':'#94a3b8','급여':'#34d399',
+  '기타수입':'#6ee7b7','기타':'#64748b'
+};
+const CAT_EMOJI = {
+  '식비':'🍚','카페/음료':'☕','교통':'🚇','쇼핑':'🛍️',
+  '의료/건강':'💊','문화/여가':'🎬','통신':'📱','공과금':'🏠',
+  '급여':'💼','기타수입':'💵','기타':'📦'
+};
+
+function fmt(n) { return '₩' + Math.abs(n).toLocaleString(); }
+function today() { return new Date().toISOString().slice(0,10); }
+function thisMonth() { return new Date().toISOString().slice(0,7); }
+function korMonth(m) { const [y,mo]=m.split('-'); return y+'년 '+parseInt(mo)+'월'; }
+function save() { localStorage.setItem('budget_entries', JSON.stringify(entries)); updateStats(); }
+
+// Top bar month
+document.getElementById('top-month').textContent = korMonth(thisMonth());
+
+function showToast(msg, type='success') {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.className = 'toast show ' + type;
+  setTimeout(() => t.className = 'toast', 2400);
+}
+
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-item').forEach(t => t.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  const idx = ['upload','manual','list','summary'].indexOf(name);
+  document.querySelectorAll('.tab-item')[idx].classList.add('active');
+  document.querySelector('.scroll-area').scrollTop = 0;
+  if (name === 'list') { buildMonthFilters(); renderList(); }
+  if (name === 'summary') renderSummary();
+}
+
+function updateStats() {
+  const m = thisMonth();
+  const rows = entries.filter(e => e.date.startsWith(m));
+  const inc = rows.filter(e=>e.type==='income').reduce((s,e)=>s+e.amount,0);
+  const exp = rows.filter(e=>e.type==='expense').reduce((s,e)=>s+e.amount,0);
+  document.getElementById('stat-income').textContent = fmt(inc);
+  document.getElementById('stat-expense').textContent = fmt(exp);
+  const bal = inc - exp;
+  const el = document.getElementById('stat-balance');
+  el.textContent = (bal>=0?'':'-') + fmt(bal);
+  el.style.color = bal >= 0 ? 'var(--green)' : 'var(--accent2)';
+}
+
+// ---- Type Toggle ----
+function setType(t) {
+  currentType = t;
+  document.getElementById('btn-expense').className = 'type-btn' + (t==='expense'?' active-expense':'');
+  document.getElementById('btn-income').className = 'type-btn' + (t==='income'?' active-income':'');
+  document.getElementById('f-type-val').value = t;
+}
+function setMType(t) {
+  currentMType = t;
+  document.getElementById('m-btn-expense').className = 'type-btn' + (t==='expense'?' active-expense':'');
+  document.getElementById('m-btn-income').className = 'type-btn' + (t==='income'?' active-income':'');
+}
+// hidden inputs
+document.getElementById('page-upload').insertAdjacentHTML('beforeend','<input type="hidden" id="f-type-val" value="expense">');
+
+// ---- AI Upload ----
+document.getElementById('dropzone').addEventListener('dragover', e=>{ e.preventDefault(); e.currentTarget.classList.add('drag'); });
+document.getElementById('dropzone').addEventListener('dragleave', e=>e.currentTarget.classList.remove('drag'));
+document.getElementById('dropzone').addEventListener('drop', e=>{
+  e.preventDefault(); e.currentTarget.classList.remove('drag');
+  const f = e.dataTransfer.files[0]; if(f && f.type.startsWith('image/')) processImage(f);
+});
+
+function handleFileSelect(e) { const f=e.target.files[0]; if(f) processImage(f); }
+
+function processImage(file) {
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    const dataUrl = e.target.result;
+    document.getElementById('preview-img').src = dataUrl;
+    const base64 = dataUrl.split(',')[1];
+    const mimeType = file.type || 'image/jpeg';
+    document.getElementById('ai-loader').classList.add('show');
+    document.getElementById('ai-result').classList.remove('show');
+    try {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 1000,
+          messages: [{
+            role: 'user',
+            content: [
+              { type: 'image', source: { type: 'base64', media_type: mimeType, data: base64 } },
+              { type: 'text', text: `이 이미지는 영수증 또는 카드 결제 내역입니다. 다음 JSON 형식으로만 응답하세요. 마크다운 없이 순수 JSON만:
+{"date":"YYYY-MM-DD","merchant":"상호명","amount":숫자,"type":"expense","category":"카테고리","payment":"결제수단","memo":""}
+카테고리는 식비/카페음료/교통/쇼핑/의료건강/문화여가/통신/공과금/급여/기타수입/기타 중 하나(슬래시 없이). 날짜 없으면 오늘(${today()}). 금액은 숫자만.` }
+            ]
+          }]
+        })
+      });
+      const data = await res.json();
+      const text = data.content?.find(b=>b.type==='text')?.text || '';
+      const clean = text.replace(/```json|```/g,'').trim();
+      const p = JSON.parse(clean);
+      document.getElementById('f-date').value = p.date || today();
+      document.getElementById('f-merchant').value = p.merchant || '';
+      document.getElementById('f-amount').value = p.amount || '';
+      // map category
+      const catMap = {'카페음료':'카페/음료','의료건강':'의료/건강','문화여가':'문화/여가'};
+      const cat = catMap[p.category] || p.category || '기타';
+      setSelectValue('f-category', cat);
+      setSelectValue('f-payment', p.payment);
+      if(p.type === 'income') setType('income'); else setType('expense');
+      document.getElementById('f-memo').value = p.memo || '';
+    } catch(err) {
+      document.getElementById('f-date').value = today();
+      showToast('AI 분석 실패. 직접 입력해주세요.', 'error');
+    }
+    document.getElementById('ai-loader').classList.remove('show');
+    document.getElementById('ai-result').classList.add('show');
+  };
+  reader.readAsDataURL(file);
+}
+
+function setSelectValue(id, val) {
+  if (!val) return;
+  const sel = document.getElementById(id);
+  for (const opt of sel.options) if (opt.value === val || opt.text === val) { sel.value = opt.value; return; }
+}
+
+function cancelAI() {
+  document.getElementById('ai-result').classList.remove('show');
+  document.getElementById('img-input').value = '';
+}
+
+function saveEntry() {
+  const amount = parseFloat(document.getElementById('f-amount').value);
+  if (!amount) { showToast('금액을 입력해주세요', 'error'); return; }
+  entries.push({
+    id: Date.now(),
+    date: document.getElementById('f-date').value || today(),
+    merchant: document.getElementById('f-merchant').value || '(미입력)',
+    amount, type: currentType,
+    category: document.getElementById('f-category').value,
+    payment: document.getElementById('f-payment').value,
+    memo: document.getElementById('f-memo').value
+  });
+  save(); cancelAI();
+  document.getElementById('img-input').value = '';
+  showToast('✅ 저장 완료!');
+}
+
+// ---- Manual ----
+document.getElementById('m-date').value = today();
+document.getElementById('f-date').value = today();
+
+function saveManual() {
+  const amount = parseFloat(document.getElementById('m-amount').value);
+  if (!amount) { showToast('금액을 입력해주세요', 'error'); return; }
+  entries.push({
+    id: Date.now(),
+    date: document.getElementById('m-date').value || today(),
+    merchant: document.getElementById('m-merchant').value || '(미입력)',
+    amount, type: currentMType,
+    category: document.getElementById('m-category').value,
+    payment: document.getElementById('m-payment').value,
+    memo: document.getElementById('m-memo').value
+  });
+  save();
+  ['m-merchant','m-amount','m-memo'].forEach(id => document.getElementById(id).value = '');
+  showToast('✅ 저장 완료!');
+}
+
+// ---- List ----
+function buildMonthFilters() {
+  const months = [...new Set(entries.map(e=>e.date.slice(0,7)))].sort().reverse();
+  const wrap = document.getElementById('filter-scroll');
+  wrap.innerHTML = `<button class="filter-chip ${filterMonth===''?'active':''}" onclick="setMonthFilter(this,'')">전체</button>`;
+  months.slice(0,12).forEach(m => {
+    const btn = document.createElement('button');
+    btn.className = 'filter-chip' + (filterMonth===m?' active':'');
+    btn.textContent = korMonth(m);
+    btn.onclick = () => setMonthFilter(btn, m);
+    wrap.appendChild(btn);
+  });
+}
+
+function setMonthFilter(el, val) {
+  document.querySelectorAll('#filter-scroll .filter-chip').forEach(b=>b.classList.remove('active'));
+  el.classList.add('active'); filterMonth = val; renderList();
+}
+function setTypeFilter(el, val) {
+  el.closest('.filter-scroll').querySelectorAll('.filter-chip').forEach(b=>b.classList.remove('active'));
+  el.classList.add('active'); filterType = val; renderList();
+}
+
+function renderList() {
+  const search = document.getElementById('filter-search').value.toLowerCase();
+  let filtered = entries.filter(e => {
+    if (filterMonth && !e.date.startsWith(filterMonth)) return false;
+    if (filterType && e.type !== filterType) return false;
+    if (search && !e.merchant.toLowerCase().includes(search) && !(e.memo||'').toLowerCase().includes(search)) return false;
+    return true;
+  }).sort((a,b)=>b.date.localeCompare(a.date));
+
+  const list = document.getElementById('entry-list');
+  list.innerHTML = '';
+  document.getElementById('list-empty').style.display = filtered.length ? 'none' : 'block';
+
+  // Group by date
+  const groups = {};
+  filtered.forEach(e => { if(!groups[e.date]) groups[e.date]=[]; groups[e.date].push(e); });
+
+  Object.keys(groups).sort().reverse().forEach(date => {
+    const label = document.createElement('div');
+    label.className = 'entry-date-group';
+    label.textContent = date;
+    list.appendChild(label);
+    groups[date].forEach(e => {
+      const color = CAT_COLORS[e.category] || '#888';
+      const emoji = CAT_EMOJI[e.category] || '📦';
+      const card = document.createElement('div');
+      card.className = 'entry-card';
+      card.dataset.id = e.id;
+      card.innerHTML = `
+        <div class="entry-content">
+          <div class="entry-icon" style="background:${color}22">${emoji}</div>
+          <div class="entry-info">
+            <div class="entry-merchant">${e.merchant}</div>
+            <div class="entry-meta">${e.category} · ${e.payment}${e.memo?' · '+e.memo:''}</div>
+          </div>
+          <div class="entry-amount ${e.type}">${e.type==='income'?'+':'−'}${fmt(e.amount)}</div>
+        </div>
+        <button class="delete-btn" onclick="deleteEntry(${e.id})">삭제</button>
+      `;
+      // Swipe to reveal delete
+      let startX = 0;
+      card.addEventListener('touchstart', ev => { startX = ev.touches[0].clientX; }, {passive:true});
+      card.addEventListener('touchend', ev => {
+        const dx = ev.changedTouches[0].clientX - startX;
+        if (dx < -50) card.classList.add('swiped');
+        else if (dx > 30) card.classList.remove('swiped');
+      }, {passive:true});
+      list.appendChild(card);
+    });
+  });
+}
+
+function deleteEntry(id) {
+  entries = entries.filter(e => e.id !== id);
+  save(); buildMonthFilters(); renderList(); showToast('삭제 완료');
+}
+
+// ---- Summary ----
+function renderSummary() {
+  const months = [...new Set(entries.map(e=>e.date.slice(0,7)))].sort().reverse();
+  if (!months.includes(selectedSummaryMonth) && months.length) selectedSummaryMonth = months[0];
+  if (!months.length) months.push(thisMonth());
+
+  const tabs = document.getElementById('month-tabs');
+  tabs.innerHTML = '';
+  months.slice(0,12).forEach(m => {
+    const btn = document.createElement('button');
+    btn.className = 'month-chip' + (m===selectedSummaryMonth?' active':'');
+    btn.textContent = korMonth(m);
+    btn.onclick = () => { selectedSummaryMonth = m; renderSummary(); };
+    tabs.appendChild(btn);
+  });
+
+  const rows = entries.filter(e=>e.date.startsWith(selectedSummaryMonth));
+  const inc = rows.filter(e=>e.type==='income').reduce((s,e)=>s+e.amount,0);
+  const exp = rows.filter(e=>e.type==='expense').reduce((s,e)=>s+e.amount,0);
+  document.getElementById('s-income').textContent = fmt(inc);
+  document.getElementById('s-expense').textContent = fmt(exp);
+  const net = inc - exp;
+  const netEl = document.getElementById('s-net');
+  netEl.textContent = (net>=0?'':'-') + fmt(net);
+  netEl.style.color = net >= 0 ? 'var(--green)' : 'var(--accent2)';
+
+  // Bar chart
+  const catMap = {};
+  rows.filter(e=>e.type==='expense').forEach(e => catMap[e.category] = (catMap[e.category]||0) + e.amount);
+  const sorted = Object.entries(catMap).sort((a,b)=>b[1]-a[1]);
+  const maxVal = sorted[0]?.[1] || 1;
+  document.getElementById('bar-chart').innerHTML = sorted.length
+    ? sorted.map(([cat,amt])=>`
+      <div class="bar-item">
+        <div class="bar-top"><span class="bar-label">${CAT_EMOJI[cat]||'📦'} ${cat}</span><span class="bar-amount">${fmt(amt)}</span></div>
+        <div class="bar-track"><div class="bar-fill" style="width:${(amt/maxVal*100).toFixed(1)}%;background:${CAT_COLORS[cat]||'#888'}"></div></div>
+      </div>`).join('')
+    : '<div style="color:var(--muted);font-size:13px;padding:8px 0">지출 내역이 없어요</div>';
+
+  renderDonut(sorted, exp);
+}
+
+function renderDonut(sorted, total) {
+  const svg = document.getElementById('donut-svg');
+  const legend = document.getElementById('donut-legend');
+  if (!total) {
+    svg.innerHTML = '<circle cx="60" cy="60" r="40" fill="none" stroke="var(--border)" stroke-width="16"/>';
+    legend.innerHTML = '<span style="color:var(--muted);font-size:12px">데이터 없음</span>';
+    return;
+  }
+  const cx=60,cy=60,r=40;
+  let start = -Math.PI/2, svgHtml='', legendHtml='';
+  sorted.slice(0,6).forEach(([cat,amt]) => {
+    const frac = amt/total;
+    const angle = frac * 2 * Math.PI;
+    const end = start + angle;
+    const x1=cx+r*Math.cos(start),y1=cy+r*Math.sin(start);
+    const x2=cx+r*Math.cos(end),y2=cy+r*Math.sin(end);
+    const large = angle > Math.PI ? 1 : 0;
+    const color = CAT_COLORS[cat]||'#888';
+    svgHtml += `<path d="M${cx} ${cy} L${x1} ${y1} A${r} ${r} 0 ${large} 1 ${x2} ${y2}Z" fill="${color}" opacity="0.85"/>`;
+    legendHtml += `<div class="legend-item"><span class="legend-dot" style="background:${color}"></span><span>${cat}</span><span style="margin-left:auto;font-family:var(--mono);font-size:11px">${(frac*100).toFixed(0)}%</span></div>`;
+    start = end;
+  });
+  svg.innerHTML = svgHtml + `<circle cx="${cx}" cy="${cy}" r="22" fill="var(--surface)"/>`;
+  legend.innerHTML = legendHtml;
+}
+
+// ---- Init ----
+updateStats();
+</script>
+</body>
+</html>

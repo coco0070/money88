@@ -316,6 +316,11 @@
       <div class="loader" id="ai-loader"><div class="spinner"></div> AI가 분석하는 중...</div>
 
       <div class="ai-result" id="ai-result">
+        <div id="ai-debug-wrap" style="display:none;margin-bottom:10px">
+          <div style="font-size:10px;color:var(--yellow);font-weight:600;margin-bottom:4px">🔍 AI 응답 미리보기 (디버그)</div>
+          <div id="ai-debug" style="font-size:10px;color:var(--muted);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px;word-break:break-all;white-space:pre-wrap;max-height:80px;overflow-y:auto"></div>
+          <button onclick="document.getElementById('ai-debug-wrap').style.display='none'" style="font-size:10px;color:var(--muted);background:none;border:none;margin-top:4px;cursor:pointer">닫기</button>
+        </div>
         <div class="ai-result-header"><span>AI 분석 결과</span><span class="ai-badge">AI</span><span id="ai-count" style="font-size:12px;color:var(--muted);font-weight:500;margin-left:auto"></span></div>
         <img id="preview-img" class="preview-img" src="" alt="">
         <div id="ai-items-list" style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px"></div>
@@ -856,16 +861,17 @@ async function processImageFromUrl(originalUrl) {
       });
       const data = await res.json();
       text = data.content?.find(b=>b.type==='text')?.text || '';
-      console.log('AI raw response:', text);
+      // Show raw response for debugging
+      document.getElementById('ai-debug').textContent = text.slice(0, 300);
+      document.getElementById('ai-debug-wrap').style.display = 'block';
       // Try to extract JSON array or object from response
       let clean = text.replace(/```json|```/g,'').trim();
-      // Find JSON array or object
-      const arrMatch = clean.match(/\[[\s\S]*\]/);
-      const objMatch = clean.match(/\{[\s\S]*\}/);
+      // Find JSON array or object - be more aggressive
+      const arrMatch = clean.match(/\[[\s\S]*?\]/s);
+      const objMatch = clean.match(/\{[\s\S]*?\}/s);
       if (arrMatch) clean = arrMatch[0];
-      else if (objMatch) clean = '{"items":[' + objMatch[0] + ']}';
+      else if (objMatch) clean = '[' + objMatch[0] + ']';
       let parsed = JSON.parse(clean);
-      if (!Array.isArray(parsed)) parsed = parsed.items || [parsed];
       if (!Array.isArray(parsed)) parsed = [parsed];
       const rawItems = parsed.filter(p => (p.amount > 0) && (p.merchant && p.merchant.trim() !== '' && p.merchant !== '(미입력)'));
       pendingItems = rawItems.map((p,i) => ({

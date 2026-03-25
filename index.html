@@ -378,17 +378,30 @@
 
     <!-- Page: List -->
     <div class="page" id="page-list">
-      <div class="search-input-wrap">
-        <span class="search-icon">🔍</span>
-        <input type="text" id="filter-search" placeholder="검색..." oninput="renderList()">
+      <!-- 일반 모드 헤더 -->
+      <div id="list-header-normal">
+        <div class="search-input-wrap">
+          <span class="search-icon">🔍</span>
+          <input type="text" id="filter-search" placeholder="검색..." oninput="renderList()">
+          <button onclick="enterSelectMode()" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;padding:4px 8px;font-family:var(--font)">선택</button>
+        </div>
+        <div class="filter-scroll" id="filter-scroll">
+          <button class="filter-chip active" onclick="setMonthFilter(this, '')">전체</button>
+        </div>
+        <div class="filter-scroll">
+          <button class="filter-chip active" data-type="" onclick="setTypeFilter(this, '')">전체</button>
+          <button class="filter-chip" data-type="income" onclick="setTypeFilter(this, 'income')">💰 수입</button>
+          <button class="filter-chip" data-type="expense" onclick="setTypeFilter(this, 'expense')">💸 지출</button>
+        </div>
       </div>
-      <div class="filter-scroll" id="filter-scroll">
-        <button class="filter-chip active" onclick="setMonthFilter(this, '')">전체</button>
-      </div>
-      <div class="filter-scroll">
-        <button class="filter-chip active" data-type="" onclick="setTypeFilter(this, '')">전체</button>
-        <button class="filter-chip" data-type="income" onclick="setTypeFilter(this, 'income')">💰 수입</button>
-        <button class="filter-chip" data-type="expense" onclick="setTypeFilter(this, 'expense')">💸 지출</button>
+      <!-- 선택 모드 헤더 -->
+      <div id="list-header-select" style="display:none;margin-bottom:12px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <button onclick="toggleSelectAll()" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 14px;color:var(--text);font-size:13px;font-weight:600;cursor:pointer;font-family:var(--font)" id="select-all-btn">전체선택</button>
+          <span id="select-count" style="font-size:13px;color:var(--muted);font-weight:600">0개 선택됨</span>
+          <button onclick="exitSelectMode()" style="background:none;border:none;color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;font-family:var(--font)">취소</button>
+        </div>
+        <button id="delete-selected-btn" onclick="deleteSelected()" style="width:100%;padding:13px;background:#e05c7a22;border:1px solid var(--accent2);border-radius:12px;color:var(--accent2);font-size:14px;font-weight:700;cursor:pointer;font-family:var(--font);display:none">🗑️ 선택 항목 삭제</button>
       </div>
       <div class="entry-list" id="entry-list"></div>
       <div class="empty" id="list-empty" style="display:none">내역이 없어요 🗂️<br><small>영수증을 찍거나 직접 입력해보세요</small></div>
@@ -753,7 +766,7 @@ function showManualWithImage(imgUrl) {
   document.getElementById('m-date').value = today();
 }
 
-function compressImage(dataUrl, maxWidth=1200, quality=0.75) {
+function compressImage(dataUrl, maxWidth=1600, quality=0.85) {
   return new Promise(resolve => {
     const img = new Image();
     img.onload = () => {
@@ -762,7 +775,27 @@ function compressImage(dataUrl, maxWidth=1200, quality=0.75) {
       const h = Math.round(img.height * scale);
       const canvas = document.createElement('canvas');
       canvas.width = w; canvas.height = h;
-      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      const ctx = canvas.getContext('2d');
+      // Draw image
+      ctx.drawImage(img, 0, 0, w, h);
+      // Enhance: brighten dark images and boost contrast
+      const imageData = ctx.getImageData(0, 0, w, h);
+      const data = imageData.data;
+      // Calculate average brightness
+      let sum = 0;
+      for (let i = 0; i < data.length; i += 4) sum += (data[i] + data[i+1] + data[i+2]) / 3;
+      const avg = sum / (data.length / 4);
+      // If dark image (avg < 100), brighten it
+      const brighten = avg < 100 ? (140 - avg) / 255 * 1.5 : 0;
+      const contrast = avg < 100 ? 1.4 : 1.1;
+      const factor = contrast;
+      const intercept = 128 * (1 - factor) + brighten * 255;
+      for (let i = 0; i < data.length; i += 4) {
+        data[i]   = Math.min(255, Math.max(0, data[i]   * factor + intercept));
+        data[i+1] = Math.min(255, Math.max(0, data[i+1] * factor + intercept));
+        data[i+2] = Math.min(255, Math.max(0, data[i+2] * factor + intercept));
+      }
+      ctx.putImageData(imageData, 0, 0);
       const compressed = canvas.toDataURL('image/jpeg', quality);
       resolve({ dataUrl: compressed, mimeType: 'image/jpeg' });
     };
@@ -991,6 +1024,57 @@ function setTypeFilter(el, val) {
   el.classList.add('active'); filterType = val; renderList();
 }
 
+let selectMode = false;
+let selectedIds = new Set();
+
+function enterSelectMode() {
+  selectMode = true;
+  selectedIds.clear();
+  document.getElementById('list-header-normal').style.display = 'none';
+  document.getElementById('list-header-select').style.display = 'block';
+  renderList();
+}
+
+function exitSelectMode() {
+  selectMode = false;
+  selectedIds.clear();
+  document.getElementById('list-header-normal').style.display = 'block';
+  document.getElementById('list-header-select').style.display = 'none';
+  renderList();
+}
+
+function toggleSelectAll() {
+  const search = document.getElementById('filter-search').value.toLowerCase();
+  const filtered = entries.filter(e => {
+    if (filterMonth && !e.date.startsWith(filterMonth)) return false;
+    if (filterType && e.type !== filterType) return false;
+    if (search && !e.merchant.toLowerCase().includes(search) && !(e.memo||'').toLowerCase().includes(search)) return false;
+    return true;
+  });
+  const allSelected = filtered.every(e => selectedIds.has(e.id));
+  if (allSelected) selectedIds.clear();
+  else filtered.forEach(e => selectedIds.add(e.id));
+  updateSelectUI();
+  renderList();
+}
+
+function updateSelectUI() {
+  const count = selectedIds.size;
+  document.getElementById('select-count').textContent = count + '개 선택됨';
+  document.getElementById('delete-selected-btn').style.display = count > 0 ? 'block' : 'none';
+  document.getElementById('delete-selected-btn').textContent = '🗑️ ' + count + '개 삭제하기';
+}
+
+function deleteSelected() {
+  if (!selectedIds.size) return;
+  if (!confirm(selectedIds.size + '개 항목을 삭제할까요?')) return;
+  entries = entries.filter(e => !selectedIds.has(e.id));
+  save(); buildMonthFilters();
+  exitSelectMode();
+  showToast('🗑️ ' + selectedIds.size + '개 삭제 완료');
+  selectedIds.clear();
+}
+
 function renderList() {
   const search = document.getElementById('filter-search').value.toLowerCase();
   let filtered = entries.filter(e => {
@@ -1017,27 +1101,45 @@ function renderList() {
       const color = CAT_COLORS[e.category] || '#888';
       const emoji = CAT_EMOJI[e.category] || '📦';
       const card = document.createElement('div');
-      card.className = 'entry-card';
+      card.className = 'entry-card' + (selectMode && selectedIds.has(e.id) ? ' selected-card' : '');
       card.dataset.id = e.id;
-      card.innerHTML = `
-        <div class="entry-content">
-          <div class="entry-icon" style="background:${color}22">${emoji}</div>
-          <div class="entry-info">
-            <div class="entry-merchant">${e.merchant}</div>
-            <div class="entry-meta">${e.category} · ${e.payment}${e.memo?' · '+e.memo:''}</div>
-          </div>
-          <div class="entry-amount ${e.type}">${e.type==='income'?'+':'−'}${fmt(e.amount)}</div>
-        </div>
-        <button class="delete-btn" onclick="deleteEntry(${e.id})">삭제</button>
-      `;
-      // Swipe to reveal delete
-      let startX = 0;
-      card.addEventListener('touchstart', ev => { startX = ev.touches[0].clientX; }, {passive:true});
-      card.addEventListener('touchend', ev => {
-        const dx = ev.changedTouches[0].clientX - startX;
-        if (dx < -50) card.classList.add('swiped');
-        else if (dx > 30) card.classList.remove('swiped');
-      }, {passive:true});
+      if (selectMode) {
+        card.style.border = selectedIds.has(e.id) ? '2px solid var(--accent)' : '1px solid var(--border)';
+        card.onclick = () => {
+          if (selectedIds.has(e.id)) selectedIds.delete(e.id);
+          else selectedIds.add(e.id);
+          updateSelectUI();
+          renderList();
+        };
+        card.innerHTML =
+          '<div class="entry-content">' +
+            '<div style="width:22px;height:22px;border-radius:50%;border:2px solid ' + (selectedIds.has(e.id) ? 'var(--accent)' : 'var(--border)') + ';background:' + (selectedIds.has(e.id) ? 'var(--accent)' : 'transparent') + ';display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:12px">' + (selectedIds.has(e.id) ? '✓' : '') + '</div>' +
+            '<div class="entry-icon" style="background:' + color + '22">' + emoji + '</div>' +
+            '<div class="entry-info">' +
+              '<div class="entry-merchant">' + e.merchant + '</div>' +
+              '<div class="entry-meta">' + e.category + ' · ' + e.payment + (e.memo?' · '+e.memo:'') + '</div>' +
+            '</div>' +
+            '<div class="entry-amount ' + e.type + '">' + (e.type==='income'?'+':'−') + fmt(e.amount) + '</div>' +
+          '</div>';
+      } else {
+        card.innerHTML =
+          '<div class="entry-content">' +
+            '<div class="entry-icon" style="background:' + color + '22">' + emoji + '</div>' +
+            '<div class="entry-info">' +
+              '<div class="entry-merchant">' + e.merchant + '</div>' +
+              '<div class="entry-meta">' + e.category + ' · ' + e.payment + (e.memo?' · '+e.memo:'') + '</div>' +
+            '</div>' +
+            '<div class="entry-amount ' + e.type + '">' + (e.type==='income'?'+':'−') + fmt(e.amount) + '</div>' +
+          '</div>' +
+          '<button class="delete-btn" onclick="deleteEntry(' + e.id + ')">삭제</button>';
+        let startX = 0;
+        card.addEventListener('touchstart', ev => { startX = ev.touches[0].clientX; }, {passive:true});
+        card.addEventListener('touchend', ev => {
+          const dx = ev.changedTouches[0].clientX - startX;
+          if (dx < -50) card.classList.add('swiped');
+          else if (dx > 30) card.classList.remove('swiped');
+        }, {passive:true});
+      }
       list.appendChild(card);
     });
   });

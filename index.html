@@ -44,6 +44,8 @@
   .top-bar-title { font-size: 18px; font-weight: 700; letter-spacing: -0.5px; }
   .top-bar-title span { color: var(--accent); }
   .top-bar-month { font-size: 13px; color: var(--muted); font-weight: 500; }
+  .top-bar-subtitle { position: absolute; left: 50%; transform: translateX(-50%); font-size: 10px; color: var(--muted); font-weight: 500; letter-spacing: 0.5px; opacity: 0.6; white-space: nowrap; }
+  .top-bar { position: relative; }
 
   /* Scroll Area */
   .scroll-area {
@@ -53,7 +55,7 @@
   }
 
   /* Pages */
-  .page { display: none; padding: 16px; }
+  .page { display: none; padding: 16px; position: relative; z-index: 1; }
   .page.active { display: block; }
 
   /* Summary cards */
@@ -246,11 +248,53 @@
   <!-- Top Bar -->
   <div class="top-bar">
     <div class="top-bar-title">가계부<span>(뱅&찌)</span></div>
-    <div class="top-bar-month" id="top-month"></div>
+    <div class="top-bar-subtitle">너의 분수를 알라</div>
+    <button class="top-bar-month" id="top-month" onclick="openMonthPicker()" style="background:none;border:1px solid var(--border);border-radius:20px;padding:4px 10px;cursor:pointer;display:flex;align-items:center;gap:4px;font-family:var(--font)"></button>
+    <!-- Month Picker Overlay -->
+    <div id="month-overlay" style="display:none;position:fixed;inset:0;background:#00000088;z-index:200;align-items:flex-end" onclick="if(event.target===this)closeMonthPicker()">
+      <div style="background:var(--surface);border-radius:20px 20px 0 0;width:100%;padding:20px 20px calc(20px + env(safe-area-inset-bottom,0px));max-height:60vh;overflow-y:auto">
+        <div style="font-size:15px;font-weight:700;margin-bottom:16px;text-align:center">월 선택</div>
+        <div id="month-picker-list" style="display:flex;flex-direction:column;gap:8px"></div>
+      </div>
+    </div>
   </div>
 
   <!-- Scroll Content -->
-  <div class="scroll-area">
+  <div class="scroll-area" style="position:relative">
+    <!-- Fountain background -->
+    <div style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none;z-index:0;opacity:0.04;width:320px;height:320px">
+      <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" width="320" height="320">
+        <!-- Base pool -->
+        <ellipse cx="100" cy="175" rx="70" ry="14" fill="#5b8def"/>
+        <ellipse cx="100" cy="173" rx="70" ry="10" fill="none" stroke="#5b8def" stroke-width="2"/>
+        <!-- Pedestal -->
+        <rect x="88" y="130" width="24" height="46" rx="4" fill="#5b8def"/>
+        <ellipse cx="100" cy="130" rx="30" ry="7" fill="#5b8def"/>
+        <!-- Upper basin -->
+        <ellipse cx="100" cy="100" rx="22" ry="5" fill="#5b8def"/>
+        <path d="M78 100 Q72 115 70 130" stroke="#5b8def" stroke-width="3" fill="none"/>
+        <path d="M122 100 Q128 115 130 130" stroke="#5b8def" stroke-width="3" fill="none"/>
+        <!-- Water streams arcing up and out -->
+        <path d="M100 95 Q85 60 70 80" stroke="#5b8def" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+        <path d="M100 95 Q115 60 130 80" stroke="#5b8def" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+        <path d="M100 95 Q80 50 60 75" stroke="#5b8def" stroke-width="2" fill="none" stroke-linecap="round"/>
+        <path d="M100 95 Q120 50 140 75" stroke="#5b8def" stroke-width="2" fill="none" stroke-linecap="round"/>
+        <path d="M100 95 Q100 45 100 70" stroke="#5b8def" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+        <path d="M100 95 Q88 42 75 65" stroke="#5b8def" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+        <path d="M100 95 Q112 42 125 65" stroke="#5b8def" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+        <!-- Water droplets -->
+        <circle cx="70" cy="80" r="2.5" fill="#5b8def"/>
+        <circle cx="130" cy="80" r="2.5" fill="#5b8def"/>
+        <circle cx="100" cy="70" r="2.5" fill="#5b8def"/>
+        <circle cx="60" cy="75" r="2" fill="#5b8def"/>
+        <circle cx="140" cy="75" r="2" fill="#5b8def"/>
+        <circle cx="75" cy="65" r="1.8" fill="#5b8def"/>
+        <circle cx="125" cy="65" r="1.8" fill="#5b8def"/>
+        <!-- Pool water ripple -->
+        <ellipse cx="100" cy="175" rx="50" ry="6" fill="none" stroke="#5b8def" stroke-width="1.5" opacity="0.5"/>
+        <ellipse cx="100" cy="175" rx="30" ry="4" fill="none" stroke="#5b8def" stroke-width="1" opacity="0.3"/>
+      </svg>
+    </div>
 
     <!-- Page: AI Upload -->
     <div class="page active" id="page-upload">
@@ -419,7 +463,7 @@ function korMonth(m) { const [y,mo]=m.split('-'); return y+'년 '+parseInt(mo)+'
 function save() { localStorage.setItem('budget_entries', JSON.stringify(entries)); updateStats(); }
 
 // Top bar month
-document.getElementById('top-month').textContent = korMonth(thisMonth());
+// top-month initialized in updateStats
 
 function showToast(msg, type='success') {
   const t = document.getElementById('toast');
@@ -438,9 +482,17 @@ function showPage(name) {
   if (name === 'summary') renderSummary();
 }
 
+let selectedStatsMonth = thisMonth();
+
 function updateStats() {
-  const m = thisMonth();
-  const rows = entries.filter(e => e.date.startsWith(m));
+  // Ensure selectedStatsMonth is valid
+  const allMonths = [...new Set(entries.map(e=>e.date.slice(0,7)))].sort().reverse();
+  if (allMonths.length && !allMonths.includes(selectedStatsMonth)) selectedStatsMonth = allMonths[0];
+
+  const btn = document.getElementById('top-month');
+  if (btn) btn.innerHTML = korMonth(selectedStatsMonth) + ' <span style="font-size:10px;opacity:0.6">▼</span>';
+
+  const rows = entries.filter(e => e.date.startsWith(selectedStatsMonth));
   const inc = rows.filter(e=>e.type==='income').reduce((s,e)=>s+e.amount,0);
   const exp = rows.filter(e=>e.type==='expense').reduce((s,e)=>s+e.amount,0);
   document.getElementById('stat-income').textContent = fmt(inc);
@@ -449,6 +501,28 @@ function updateStats() {
   const el = document.getElementById('stat-balance');
   el.textContent = (bal>=0?'':'-') + fmt(bal);
   el.style.color = bal >= 0 ? 'var(--green)' : 'var(--accent2)';
+}
+
+function openMonthPicker() {
+  const allMonths = [...new Set(entries.map(e=>e.date.slice(0,7)))].sort().reverse();
+  if (!allMonths.includes(thisMonth())) allMonths.unshift(thisMonth());
+  const list = document.getElementById('month-picker-list');
+  list.innerHTML = '';
+  allMonths.forEach(m => {
+    const btn = document.createElement('button');
+    btn.style.cssText = 'width:100%;padding:14px 16px;border-radius:12px;border:1px solid ' + (m===selectedStatsMonth?'var(--accent)':'var(--border)') + ';background:' + (m===selectedStatsMonth?'var(--accent)22':'var(--bg)') + ';color:' + (m===selectedStatsMonth?'var(--accent)':'var(--text)') + ';font-size:15px;font-weight:600;font-family:var(--font);cursor:pointer;text-align:left;display:flex;justify-content:space-between;align-items:center';
+    const rows = entries.filter(e=>e.date.startsWith(m));
+    const exp = rows.filter(e=>e.type==='expense').reduce((s,e)=>s+e.amount,0);
+    btn.innerHTML = '<span>' + korMonth(m) + '</span><span style="font-family:var(--mono);font-size:13px;opacity:0.7">' + fmt(exp) + ' 지출</span>';
+    btn.onclick = () => { selectedStatsMonth = m; closeMonthPicker(); updateStats(); };
+    list.appendChild(btn);
+  });
+  const overlay = document.getElementById('month-overlay');
+  overlay.style.display = 'flex';
+}
+
+function closeMonthPicker() {
+  document.getElementById('month-overlay').style.display = 'none';
 }
 
 const CATS = ['식비','카페/음료','교통','쇼핑','의료/건강','문화/여가','통신','공과금','급여','기타수입','기타'];
@@ -540,23 +614,24 @@ function renderAIItems() {
     const color = item.type === 'income' ? 'var(--green)' : 'var(--accent2)';
     const div = document.createElement('div');
     div.style.cssText = 'background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:12px 14px;';
-    div.innerHTML = `
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
-        <input type="checkbox" id="chk-${i}" ${item.checked?'checked':''} onchange="pendingItems[${i}].checked=this.checked" style="width:18px;height:18px;accent-color:var(--accent);cursor:pointer;flex-shrink:0">
-        <input type="text" value="${item.merchant}" oninput="pendingItems[${i}].merchant=this.value" style="flex:1;font-weight:600;font-size:14px">
-        <input type="number" value="${item.amount}" oninput="pendingItems[${i}].amount=parseFloat(this.value)||0" style="width:110px;text-align:right;font-family:var(--mono);color:${color}">
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
-        <input type="date" value="${item.date}" oninput="pendingItems[${i}].date=this.value" style="font-size:12px;padding:7px 8px">
-        <select onchange="pendingItems[${i}].category=this.value" style="font-size:12px;padding:7px 8px">
-          ${CATS.map(c=>`<option ${item.category===c?'selected':''}>${c}</option>`).join('')}
-        </select>
-        <select onchange="pendingItems[${i}].type=this.value" style="font-size:12px;padding:7px 8px">
-          <option value="expense" ${item.type==='expense'?'selected':''}>지출</option>
-          <option value="income" ${item.type==='income'?'selected':''}>수입</option>
-        </select>
-      </div>
-    `;
+
+    const catOptions = CATS.map(c => '<option value="' + c + '"' + (item.category === c ? ' selected' : '') + '>' + c + '</option>').join('');
+
+    div.innerHTML =
+      '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">' +
+        '<input type="checkbox" id="chk-' + i + '" ' + (item.checked ? 'checked' : '') + ' onchange="pendingItems[' + i + '].checked=this.checked" style="width:18px;height:18px;accent-color:var(--accent);cursor:pointer;flex-shrink:0">' +
+        '<input type="text" value="' + item.merchant + '" oninput="pendingItems[' + i + '].merchant=this.value" style="flex:1;font-weight:600;font-size:14px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:6px 8px;color:var(--text)">' +
+        '<span style="font-family:var(--mono);font-size:14px;font-weight:600;color:' + color + ';white-space:nowrap">' + (item.type==='income'?'+':'-') + '₩' + item.amount.toLocaleString() + '</span>' +
+      '</div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">' +
+        '<input type="date" value="' + item.date + '" onchange="pendingItems[' + i + '].date=this.value" style="font-size:11px;padding:6px 6px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text)">' +
+        '<select onchange="pendingItems[' + i + '].category=this.value" style="font-size:11px;padding:6px 6px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text)">' + catOptions + '</select>' +
+        '<select onchange="pendingItems[' + i + '].type=this.value;renderAIItems()" style="font-size:11px;padding:6px 6px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text)">' +
+          '<option value="expense"' + (item.type==='expense'?' selected':'') + '>💸 지출</option>' +
+          '<option value="income"' + (item.type==='income'?' selected':'') + '>💰 수입</option>' +
+        '</select>' +
+      '</div>';
+
     list.appendChild(div);
   });
 }

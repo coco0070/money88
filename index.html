@@ -277,57 +277,10 @@
       <div class="loader" id="ai-loader"><div class="spinner"></div> AI가 분석하는 중...</div>
 
       <div class="ai-result" id="ai-result">
-        <div class="ai-result-header"><span>AI 분석 결과</span><span class="ai-badge">AI</span></div>
+        <div class="ai-result-header"><span>AI 분석 결과</span><span class="ai-badge">AI</span><span id="ai-count" style="font-size:12px;color:var(--muted);font-weight:500;margin-left:auto"></span></div>
         <img id="preview-img" class="preview-img" src="" alt="">
-
-        <div class="form-row">
-          <div class="form-group" style="margin-bottom:0">
-            <label>날짜</label>
-            <input type="date" id="f-date">
-          </div>
-          <div class="form-group" style="margin-bottom:0">
-            <label>금액 (원)</label>
-            <input type="number" id="f-amount" placeholder="0">
-          </div>
-        </div>
-
-        <div class="form-group">
-          <label>유형</label>
-          <div class="type-toggle">
-            <button class="type-btn active-expense" id="btn-expense" onclick="setType('expense')">💸 지출</button>
-            <button class="type-btn" id="btn-income" onclick="setType('income')">💰 수입</button>
-          </div>
-        </div>
-
-        <div class="form-group">
-          <label>상호명 / 내용</label>
-          <input type="text" id="f-merchant" placeholder="예: 스타벅스">
-        </div>
-
-        <div class="form-row">
-          <div class="form-group" style="margin-bottom:0">
-            <label>카테고리</label>
-            <select id="f-category">
-              <option>식비</option><option>카페/음료</option><option>교통</option>
-              <option>쇼핑</option><option>의료/건강</option><option>문화/여가</option>
-              <option>통신</option><option>공과금</option><option>급여</option>
-              <option>기타수입</option><option>기타</option>
-            </select>
-          </div>
-          <div class="form-group" style="margin-bottom:0">
-            <label>결제수단</label>
-            <select id="f-payment">
-              <option>카드</option><option>현금</option><option>계좌이체</option><option>기타</option>
-            </select>
-          </div>
-        </div>
-
-        <div class="form-group">
-          <label>메모</label>
-          <input type="text" id="f-memo" placeholder="메모 (선택)">
-        </div>
-
-        <button class="btn-full btn-primary" onclick="saveEntry()">✅ 저장하기</button>
+        <div id="ai-items-list" style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px"></div>
+        <button class="btn-full btn-primary" onclick="saveAllEntries()">✅ 전체 저장하기</button>
         <button class="btn-full btn-secondary" style="margin-top:8px" onclick="cancelAI()">취소</button>
       </div>
     </div>
@@ -498,20 +451,17 @@ function updateStats() {
   el.style.color = bal >= 0 ? 'var(--green)' : 'var(--accent2)';
 }
 
-// ---- Type Toggle ----
-function setType(t) {
-  currentType = t;
-  document.getElementById('btn-expense').className = 'type-btn' + (t==='expense'?' active-expense':'');
-  document.getElementById('btn-income').className = 'type-btn' + (t==='income'?' active-income':'');
-  document.getElementById('f-type-val').value = t;
-}
+const CATS = ['식비','카페/음료','교통','쇼핑','의료/건강','문화/여가','통신','공과금','급여','기타수입','기타'];
+const PAYMENTS = ['카드','현금','계좌이체','기타'];
+const CAT_MAP = {'카페음료':'카페/음료','의료건강':'의료/건강','문화여가':'문화/여가'};
+let pendingItems = [];
+
+// ---- Type Toggle (manual) ----
 function setMType(t) {
   currentMType = t;
   document.getElementById('m-btn-expense').className = 'type-btn' + (t==='expense'?' active-expense':'');
   document.getElementById('m-btn-income').className = 'type-btn' + (t==='income'?' active-income':'');
 }
-// hidden inputs
-document.getElementById('page-upload').insertAdjacentHTML('beforeend','<input type="hidden" id="f-type-val" value="expense">');
 
 // ---- AI Upload ----
 document.getElementById('dropzone').addEventListener('dragover', e=>{ e.preventDefault(); e.currentTarget.classList.add('drag'); });
@@ -538,34 +488,41 @@ function processImage(file) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model: 'claude-sonnet-4-20250514',
-          max_tokens: 1000,
+          max_tokens: 2000,
           messages: [{
             role: 'user',
             content: [
               { type: 'image', source: { type: 'base64', media_type: mimeType, data: base64 } },
-              { type: 'text', text: `이 이미지는 영수증 또는 카드 결제 내역입니다. 다음 JSON 형식으로만 응답하세요. 마크다운 없이 순수 JSON만:
-{"date":"YYYY-MM-DD","merchant":"상호명","amount":숫자,"type":"expense","category":"카테고리","payment":"결제수단","memo":""}
-카테고리는 식비/카페음료/교통/쇼핑/의료건강/문화여가/통신/공과금/급여/기타수입/기타 중 하나(슬래시 없이). 날짜 없으면 오늘(${today()}). 금액은 숫자만.` }
+              { type: 'text', text: `이 이미지는 영수증, 카드 결제내역, 토스/카드사 앱 사용내역 등입니다.
+이미지에서 결제/거래 내역을 모두 찾아서 JSON 배열로만 응답하세요. 마크다운 없이 순수 JSON 배열만:
+[{"date":"YYYY-MM-DD","merchant":"상호명","amount":숫자,"type":"expense또는income","category":"카테고리","payment":"결제수단","memo":""}]
+- 여러 건이면 모두 포함
+- 카테고리: 식비/카페음료/교통/쇼핑/의료건강/문화여가/통신/공과금/급여/기타수입/기타 중 하나(슬래시 없이)
+- 날짜 없으면 오늘(${today()})
+- 금액은 숫자만(원화 기준)
+- 취소/환불 건은 제외` }
             ]
           }]
         })
       });
       const data = await res.json();
       const text = data.content?.find(b=>b.type==='text')?.text || '';
-      const clean = text.replace(/```json|```/g,'').trim();
-      const p = JSON.parse(clean);
-      document.getElementById('f-date').value = p.date || today();
-      document.getElementById('f-merchant').value = p.merchant || '';
-      document.getElementById('f-amount').value = p.amount || '';
-      // map category
-      const catMap = {'카페음료':'카페/음료','의료건강':'의료/건강','문화여가':'문화/여가'};
-      const cat = catMap[p.category] || p.category || '기타';
-      setSelectValue('f-category', cat);
-      setSelectValue('f-payment', p.payment);
-      if(p.type === 'income') setType('income'); else setType('expense');
-      document.getElementById('f-memo').value = p.memo || '';
+      const clean = text.replace(/\`\`\`json|\`\`\`/g,'').trim();
+      let parsed = JSON.parse(clean);
+      if (!Array.isArray(parsed)) parsed = [parsed];
+      pendingItems = parsed.map((p,i) => ({
+        id: i,
+        date: p.date || today(),
+        merchant: p.merchant || '(미입력)',
+        amount: p.amount || 0,
+        type: p.type || 'expense',
+        category: CAT_MAP[p.category] || p.category || '기타',
+        payment: p.payment || '카드',
+        memo: p.memo || '',
+        checked: true
+      }));
+      renderAIItems();
     } catch(err) {
-      document.getElementById('f-date').value = today();
       showToast('AI 분석 실패. 직접 입력해주세요.', 'error');
     }
     document.getElementById('ai-loader').classList.remove('show');
@@ -574,32 +531,52 @@ function processImage(file) {
   reader.readAsDataURL(file);
 }
 
-function setSelectValue(id, val) {
-  if (!val) return;
-  const sel = document.getElementById(id);
-  for (const opt of sel.options) if (opt.value === val || opt.text === val) { sel.value = opt.value; return; }
+function renderAIItems() {
+  const list = document.getElementById('ai-items-list');
+  const count = document.getElementById('ai-count');
+  count.textContent = pendingItems.length + '건 인식됨';
+  list.innerHTML = '';
+  pendingItems.forEach((item, i) => {
+    const color = item.type === 'income' ? 'var(--green)' : 'var(--accent2)';
+    const div = document.createElement('div');
+    div.style.cssText = 'background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:12px 14px;';
+    div.innerHTML = `
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+        <input type="checkbox" id="chk-${i}" ${item.checked?'checked':''} onchange="pendingItems[${i}].checked=this.checked" style="width:18px;height:18px;accent-color:var(--accent);cursor:pointer;flex-shrink:0">
+        <input type="text" value="${item.merchant}" oninput="pendingItems[${i}].merchant=this.value" style="flex:1;font-weight:600;font-size:14px">
+        <input type="number" value="${item.amount}" oninput="pendingItems[${i}].amount=parseFloat(this.value)||0" style="width:110px;text-align:right;font-family:var(--mono);color:${color}">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+        <input type="date" value="${item.date}" oninput="pendingItems[${i}].date=this.value" style="font-size:12px;padding:7px 8px">
+        <select onchange="pendingItems[${i}].category=this.value" style="font-size:12px;padding:7px 8px">
+          ${CATS.map(c=>`<option ${item.category===c?'selected':''}>${c}</option>`).join('')}
+        </select>
+        <select onchange="pendingItems[${i}].type=this.value" style="font-size:12px;padding:7px 8px">
+          <option value="expense" ${item.type==='expense'?'selected':''}>지출</option>
+          <option value="income" ${item.type==='income'?'selected':''}>수입</option>
+        </select>
+      </div>
+    `;
+    list.appendChild(div);
+  });
 }
 
 function cancelAI() {
   document.getElementById('ai-result').classList.remove('show');
   document.getElementById('img-input').value = '';
+  document.getElementById('img-camera').value = '';
+  pendingItems = [];
 }
 
-function saveEntry() {
-  const amount = parseFloat(document.getElementById('f-amount').value);
-  if (!amount) { showToast('금액을 입력해주세요', 'error'); return; }
-  entries.push({
-    id: Date.now(),
-    date: document.getElementById('f-date').value || today(),
-    merchant: document.getElementById('f-merchant').value || '(미입력)',
-    amount, type: currentType,
-    category: document.getElementById('f-category').value,
-    payment: document.getElementById('f-payment').value,
-    memo: document.getElementById('f-memo').value
+function saveAllEntries() {
+  const toSave = pendingItems.filter((_,i) => document.getElementById('chk-'+i)?.checked);
+  if (!toSave.length) { showToast('저장할 항목을 선택해주세요', 'error'); return; }
+  toSave.forEach(item => {
+    entries.push({ id: Date.now() + Math.random(), date: item.date, merchant: item.merchant,
+      amount: item.amount, type: item.type, category: item.category, payment: item.payment, memo: item.memo });
   });
   save(); cancelAI();
-  document.getElementById('img-input').value = '';
-  showToast('✅ 저장 완료!');
+  showToast('✅ ' + toSave.length + '건 저장 완료!');
 }
 
 // ---- Manual ----

@@ -480,9 +480,8 @@ function showPage(name) {
 let selectedStatsMonth = thisMonth();
 
 function updateStats() {
-  // Ensure selectedStatsMonth is valid
+  // Keep this month as default, only fallback if truly needed
   const allMonths = [...new Set(entries.map(e=>e.date.slice(0,7)))].sort().reverse();
-  if (allMonths.length && !allMonths.includes(selectedStatsMonth)) selectedStatsMonth = allMonths[0];
 
   const btn = document.getElementById('top-month');
   if (btn) btn.innerHTML = korMonth(selectedStatsMonth) + ' <span style="font-size:10px;opacity:0.6">▼</span>';

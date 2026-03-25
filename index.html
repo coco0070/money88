@@ -396,23 +396,57 @@
 
     <!-- Page: Summary -->
     <div class="page" id="page-summary">
-      <div class="month-scroll" id="month-tabs"></div>
-      <div class="cards-row">
-        <div class="card"><div class="card-label">수입</div><div class="card-value income" id="s-income">₩0</div></div>
-        <div class="card"><div class="card-label">지출</div><div class="card-value expense" id="s-expense">₩0</div></div>
-        <div class="card"><div class="card-label">순수익</div><div class="card-value" id="s-net">₩0</div></div>
+      <!-- 연간/월간 탭 -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:16px">
+        <button id="tab-monthly" onclick="setSummaryMode('monthly')" style="padding:11px;font-size:14px;font-weight:700;font-family:var(--font);border:none;cursor:pointer;background:var(--accent);color:#fff">📅 월간</button>
+        <button id="tab-yearly" onclick="setSummaryMode('yearly')" style="padding:11px;font-size:14px;font-weight:700;font-family:var(--font);border:none;cursor:pointer;background:var(--bg);color:var(--muted)">📆 연간</button>
       </div>
 
-      <div class="chart-card">
-        <div class="section-title">카테고리별 지출</div>
-        <div class="bar-group" id="bar-chart"></div>
+      <!-- 월간 뷰 -->
+      <div id="view-monthly">
+        <div class="month-scroll" id="month-tabs"></div>
+        <div class="cards-row">
+          <div class="card"><div class="card-label">수입</div><div class="card-value income" id="s-income">₩0</div></div>
+          <div class="card"><div class="card-label">지출</div><div class="card-value expense" id="s-expense">₩0</div></div>
+          <div class="card"><div class="card-label">순수익</div><div class="card-value" id="s-net">₩0</div></div>
+        </div>
+        <div class="chart-card">
+          <div class="section-title">카테고리별 지출</div>
+          <div class="bar-group" id="bar-chart"></div>
+        </div>
+        <div class="chart-card">
+          <div class="section-title">지출 비중</div>
+          <div class="donut-row">
+            <svg width="110" height="110" viewBox="0 0 120 120" id="donut-svg"></svg>
+            <div class="donut-legend" id="donut-legend"></div>
+          </div>
+        </div>
       </div>
 
-      <div class="chart-card">
-        <div class="section-title">지출 비중</div>
-        <div class="donut-row">
-          <svg width="110" height="110" viewBox="0 0 120 120" id="donut-svg"></svg>
-          <div class="donut-legend" id="donut-legend"></div>
+      <!-- 연간 뷰 -->
+      <div id="view-yearly" style="display:none">
+        <div class="month-scroll" id="year-tabs"></div>
+        <div class="cards-row">
+          <div class="card"><div class="card-label">연간 수입</div><div class="card-value income" id="y-income">₩0</div></div>
+          <div class="card"><div class="card-label">연간 지출</div><div class="card-value expense" id="y-expense">₩0</div></div>
+          <div class="card"><div class="card-label">순수익</div><div class="card-value" id="y-net">₩0</div></div>
+        </div>
+        <!-- 월별 추이 바 차트 -->
+        <div class="chart-card">
+          <div class="section-title">월별 지출 추이</div>
+          <div class="bar-group" id="yearly-month-chart"></div>
+        </div>
+        <!-- 연간 카테고리 -->
+        <div class="chart-card">
+          <div class="section-title">카테고리별 연간 지출</div>
+          <div class="bar-group" id="yearly-cat-chart"></div>
+        </div>
+        <div class="chart-card">
+          <div class="section-title">연간 지출 비중</div>
+          <div class="donut-row">
+            <svg width="110" height="110" viewBox="0 0 120 120" id="yearly-donut-svg"></svg>
+            <div class="donut-legend" id="yearly-donut-legend"></div>
+          </div>
         </div>
       </div>
     </div>
@@ -421,7 +455,7 @@
 
   <!-- Bottom Tab Bar -->
   <nav class="tab-bar">
-    <button class="tab-item active" onclick="showPage('upload')"><span class="tab-icon">📸</span>AI입력</button>
+    <button class="tab-item active" onclick="showPage('upload')"><span class="tab-icon">⛲</span>AI입력</button>
     <button class="tab-item" onclick="showPage('manual')"><span class="tab-icon">✏️</span>직접입력</button>
     <button class="tab-item" onclick="showPage('list')"><span class="tab-icon">📋</span>내역</button>
     <button class="tab-item" onclick="showPage('summary')"><span class="tab-icon">📊</span>요약</button>
@@ -541,15 +575,35 @@ document.getElementById('dropzone').addEventListener('drop', e=>{
 
 function handleFileSelect(e) { const f=e.target.files[0]; if(f) processImage(f); }
 
+function compressImage(dataUrl, maxWidth=1200, quality=0.75) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, maxWidth / Math.max(img.width, img.height));
+      const w = Math.round(img.width * scale);
+      const h = Math.round(img.height * scale);
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      const compressed = canvas.toDataURL('image/jpeg', quality);
+      resolve({ dataUrl: compressed, mimeType: 'image/jpeg' });
+    };
+    img.src = dataUrl;
+  });
+}
+
 function processImage(file) {
   const reader = new FileReader();
   reader.onload = async (e) => {
-    const dataUrl = e.target.result;
-    document.getElementById('preview-img').src = dataUrl;
-    const base64 = dataUrl.split(',')[1];
-    const mimeType = file.type || 'image/jpeg';
+    const originalUrl = e.target.result;
+    document.getElementById('preview-img').src = originalUrl;
     document.getElementById('ai-loader').classList.add('show');
     document.getElementById('ai-result').classList.remove('show');
+
+    // Compress image before sending
+    const { dataUrl, mimeType } = await compressImage(originalUrl);
+    const base64 = dataUrl.split(',')[1];
+
     try {
       const res = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
@@ -758,6 +812,21 @@ function deleteEntry(id) {
 }
 
 // ---- Summary ----
+let summaryMode = 'monthly';
+let selectedYear = new Date().getFullYear().toString();
+
+function setSummaryMode(mode) {
+  summaryMode = mode;
+  document.getElementById('view-monthly').style.display = mode==='monthly' ? 'block' : 'none';
+  document.getElementById('view-yearly').style.display = mode==='yearly' ? 'block' : 'none';
+  document.getElementById('tab-monthly').style.background = mode==='monthly' ? 'var(--accent)' : 'var(--bg)';
+  document.getElementById('tab-monthly').style.color = mode==='monthly' ? '#fff' : 'var(--muted)';
+  document.getElementById('tab-yearly').style.background = mode==='yearly' ? 'var(--accent)' : 'var(--bg)';
+  document.getElementById('tab-yearly').style.color = mode==='yearly' ? '#fff' : 'var(--muted)';
+  if (mode==='monthly') renderSummary();
+  else renderYearlySummary();
+}
+
 function renderSummary() {
   const months = [...new Set(entries.map(e=>e.date.slice(0,7)))].sort().reverse();
   if (!months.includes(selectedSummaryMonth) && months.length) selectedSummaryMonth = months[0];
@@ -783,25 +852,86 @@ function renderSummary() {
   netEl.textContent = (net>=0?'':'-') + fmt(net);
   netEl.style.color = net >= 0 ? 'var(--green)' : 'var(--accent2)';
 
-  // Bar chart
   const catMap = {};
   rows.filter(e=>e.type==='expense').forEach(e => catMap[e.category] = (catMap[e.category]||0) + e.amount);
   const sorted = Object.entries(catMap).sort((a,b)=>b[1]-a[1]);
   const maxVal = sorted[0]?.[1] || 1;
   document.getElementById('bar-chart').innerHTML = sorted.length
-    ? sorted.map(([cat,amt])=>`
-      <div class="bar-item">
-        <div class="bar-top"><span class="bar-label">${CAT_EMOJI[cat]||'📦'} ${cat}</span><span class="bar-amount">${fmt(amt)}</span></div>
-        <div class="bar-track"><div class="bar-fill" style="width:${(amt/maxVal*100).toFixed(1)}%;background:${CAT_COLORS[cat]||'#888'}"></div></div>
-      </div>`).join('')
+    ? sorted.map(([cat,amt])=>
+        '<div class="bar-item">' +
+        '<div class="bar-top"><span class="bar-label">' + (CAT_EMOJI[cat]||'📦') + ' ' + cat + '</span><span class="bar-amount">' + fmt(amt) + '</span></div>' +
+        '<div class="bar-track"><div class="bar-fill" style="width:' + (amt/maxVal*100).toFixed(1) + '%;background:' + (CAT_COLORS[cat]||'#888') + '"></div></div>' +
+        '</div>').join('')
     : '<div style="color:var(--muted);font-size:13px;padding:8px 0">지출 내역이 없어요</div>';
 
   renderDonut(sorted, exp);
 }
 
+function renderYearlySummary() {
+  const years = [...new Set(entries.map(e=>e.date.slice(0,4)))].sort().reverse();
+  if (!years.includes(selectedYear) && years.length) selectedYear = years[0];
+  if (!years.length) years.push(new Date().getFullYear().toString());
+
+  // Year tabs
+  const ytabs = document.getElementById('year-tabs');
+  ytabs.innerHTML = '';
+  years.forEach(y => {
+    const btn = document.createElement('button');
+    btn.className = 'month-chip' + (y===selectedYear?' active':'');
+    btn.textContent = y + '년';
+    btn.onclick = () => { selectedYear = y; renderYearlySummary(); };
+    ytabs.appendChild(btn);
+  });
+
+  const rows = entries.filter(e=>e.date.startsWith(selectedYear));
+  const inc = rows.filter(e=>e.type==='income').reduce((s,e)=>s+e.amount,0);
+  const exp = rows.filter(e=>e.type==='expense').reduce((s,e)=>s+e.amount,0);
+  document.getElementById('y-income').textContent = fmt(inc);
+  document.getElementById('y-expense').textContent = fmt(exp);
+  const net = inc - exp;
+  const ynet = document.getElementById('y-net');
+  ynet.textContent = (net>=0?'':'-') + fmt(net);
+  ynet.style.color = net >= 0 ? 'var(--green)' : 'var(--accent2)';
+
+  // Monthly trend bar chart
+  const monthlyExp = {};
+  for (let m=1; m<=12; m++) {
+    const key = selectedYear + '-' + String(m).padStart(2,'0');
+    monthlyExp[key] = rows.filter(e=>e.date.startsWith(key) && e.type==='expense').reduce((s,e)=>s+e.amount,0);
+  }
+  const maxMonthVal = Math.max(...Object.values(monthlyExp)) || 1;
+  const monthNames = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
+  document.getElementById('yearly-month-chart').innerHTML = Object.entries(monthlyExp).map(([key, amt], i) =>
+    '<div class="bar-item">' +
+    '<div class="bar-top"><span class="bar-label">' + monthNames[i] + '</span><span class="bar-amount">' + (amt>0?fmt(amt):'-') + '</span></div>' +
+    '<div class="bar-track"><div class="bar-fill" style="width:' + (amt/maxMonthVal*100).toFixed(1) + '%;background:var(--accent2)"></div></div>' +
+    '</div>'
+  ).join('');
+
+  // Yearly category chart
+  const catMap = {};
+  rows.filter(e=>e.type==='expense').forEach(e => catMap[e.category] = (catMap[e.category]||0) + e.amount);
+  const sorted = Object.entries(catMap).sort((a,b)=>b[1]-a[1]);
+  const maxCatVal = sorted[0]?.[1] || 1;
+  document.getElementById('yearly-cat-chart').innerHTML = sorted.length
+    ? sorted.map(([cat,amt])=>
+        '<div class="bar-item">' +
+        '<div class="bar-top"><span class="bar-label">' + (CAT_EMOJI[cat]||'📦') + ' ' + cat + '</span><span class="bar-amount">' + fmt(amt) + '</span></div>' +
+        '<div class="bar-track"><div class="bar-fill" style="width:' + (amt/maxCatVal*100).toFixed(1) + '%;background:' + (CAT_COLORS[cat]||'#888') + '"></div></div>' +
+        '</div>').join('')
+    : '<div style="color:var(--muted);font-size:13px;padding:8px 0">지출 내역이 없어요</div>';
+
+  // Yearly donut
+  renderDonutTo('yearly-donut-svg', 'yearly-donut-legend', sorted, exp);
+}
+
 function renderDonut(sorted, total) {
-  const svg = document.getElementById('donut-svg');
-  const legend = document.getElementById('donut-legend');
+  renderDonutTo('donut-svg', 'donut-legend', sorted, total);
+}
+
+function renderDonutTo(svgId, legendId, sorted, total) {
+  const svg = document.getElementById(svgId);
+  const legend = document.getElementById(legendId);
   if (!total) {
     svg.innerHTML = '<circle cx="60" cy="60" r="40" fill="none" stroke="var(--border)" stroke-width="16"/>';
     legend.innerHTML = '<span style="color:var(--muted);font-size:12px">데이터 없음</span>';
@@ -817,11 +947,11 @@ function renderDonut(sorted, total) {
     const x2=cx+r*Math.cos(end),y2=cy+r*Math.sin(end);
     const large = angle > Math.PI ? 1 : 0;
     const color = CAT_COLORS[cat]||'#888';
-    svgHtml += `<path d="M${cx} ${cy} L${x1} ${y1} A${r} ${r} 0 ${large} 1 ${x2} ${y2}Z" fill="${color}" opacity="0.85"/>`;
-    legendHtml += `<div class="legend-item"><span class="legend-dot" style="background:${color}"></span><span>${cat}</span><span style="margin-left:auto;font-family:var(--mono);font-size:11px">${(frac*100).toFixed(0)}%</span></div>`;
+    svgHtml += '<path d="M' + cx + ' ' + cy + ' L' + x1 + ' ' + y1 + ' A' + r + ' ' + r + ' 0 ' + large + ' 1 ' + x2 + ' ' + y2 + 'Z" fill="' + color + '" opacity="0.85"/>';
+    legendHtml += '<div class="legend-item"><span class="legend-dot" style="background:' + color + '"></span><span>' + cat + '</span><span style="margin-left:auto;font-family:var(--mono);font-size:11px">' + (frac*100).toFixed(0) + '%</span></div>';
     start = end;
   });
-  svg.innerHTML = svgHtml + `<circle cx="${cx}" cy="${cy}" r="22" fill="var(--surface)"/>`;
+  svg.innerHTML = svgHtml + '<circle cx="' + cx + '" cy="' + cy + '" r="22" fill="var(--surface)"/>';
   legend.innerHTML = legendHtml;
 }
 

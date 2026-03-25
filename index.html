@@ -467,7 +467,8 @@
     </div>
     <div class="crop-actions">
       <button class="crop-btn" style="background:var(--surface2);color:var(--muted)" onclick="cancelCrop()">취소</button>
-      <button class="crop-btn" style="background:var(--accent);color:#fff" onclick="confirmCrop()">✂️ 자르기</button>
+      <button class="crop-btn" style="background:var(--surface2);color:var(--text);border:1px solid var(--border)" onclick="confirmCropManual()">✏️ 직접입력</button>
+      <button class="crop-btn" style="background:var(--accent);color:#fff" onclick="confirmCrop()">🤖 AI분석</button>
     </div>
   </div>
 
@@ -707,6 +708,51 @@ function cancelCrop() {
   document.getElementById('img-input').value = '';
 }
 
+function confirmCropManual() {
+  // Crop the image same way but skip AI - show manual entry with image preview
+  const img = document.getElementById('crop-img');
+  const box = document.getElementById('crop-box');
+  const scaleX = img.naturalWidth / img.offsetWidth;
+  const scaleY = img.naturalHeight / img.offsetHeight;
+  const x = parseInt(box.style.left) * scaleX;
+  const y = parseInt(box.style.top) * scaleY;
+  const w = parseInt(box.style.width) * scaleX;
+  const h = parseInt(box.style.height) * scaleY;
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  canvas.getContext('2d').drawImage(
+    Object.assign(new Image(), {src: cropOriginalUrl}),
+    x, y, w, h, 0, 0, w, h
+  );
+  const fullImg = new Image();
+  fullImg.onload = () => {
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(fullImg, x, y, w, h, 0, 0, w, h);
+    const croppedUrl = canvas.toDataURL('image/jpeg', 0.9);
+    cancelCrop();
+    // Show manual entry with cropped image as reference
+    showManualWithImage(croppedUrl);
+  };
+  fullImg.src = cropOriginalUrl;
+}
+
+function showManualWithImage(imgUrl) {
+  showPage('manual');
+  // Show image at top of manual page as reference
+  let refImg = document.getElementById('manual-ref-img');
+  if (!refImg) {
+    refImg = document.createElement('img');
+    refImg.id = 'manual-ref-img';
+    refImg.style.cssText = 'width:100%;max-height:200px;object-fit:contain;border-radius:12px;border:1px solid var(--border);margin-bottom:14px;cursor:pointer';
+    refImg.title = '탭하면 닫힘';
+    refImg.onclick = () => refImg.remove();
+    document.getElementById('page-manual').insertBefore(refImg, document.getElementById('page-manual').firstChild);
+  }
+  refImg.src = imgUrl;
+  // Set today as default date
+  document.getElementById('m-date').value = today();
+}
+
 function compressImage(dataUrl, maxWidth=1200, quality=0.75) {
   return new Promise(resolve => {
     const img = new Image();
@@ -753,19 +799,23 @@ async function processImageFromUrl(originalUrl) {
               { type: 'image', source: { type: 'base64', media_type: mimeType, data: base64 } },
               { type: 'text', text: `당신은 가계부 데이터 추출 전문가입니다. 이 이미지는 카카오페이, 토스, 카드사 앱, 은행 앱, 영수증 등 금융 거래 내역 화면입니다.
 
-이미지에 보이는 모든 거래 내역을 빠짐없이 추출해서 아래 형식의 순수 JSON 배열로만 응답하세요. 설명, 마크다운, 코드블록 없이 [ 로 시작하는 JSON만:
+이미지에 보이는 모든 거래 내역을 추출하고, 각 필드마다 확인 여부를 표시해서 아래 형식의 순수 JSON 배열로만 응답하세요. 설명/마크다운/코드블록 없이 [ 로 시작하는 JSON만:
 
-[{"date":"YYYY-MM-DD","merchant":"상호명","amount":숫자,"type":"expense또는income","category":"카테고리","payment":"결제수단","memo":""}]
+[{"date":"YYYY-MM-DD","date_ok":true,"merchant":"상호명","merchant_ok":true,"amount":숫자,"amount_ok":true,"type":"expense또는income","type_ok":true,"category":"카테고리","category_ok":true,"payment":"결제수단","memo":""}]
 
-규칙:
-- 금액 앞에 - 있거나 출금/지출이면 type=expense, + 있거나 입금/수입이면 type=income
-- 이체(→ 기호 포함)는 amount가 크면 expense, 수신이면 income으로 판단
-- 카테고리는 반드시 이 중 하나: 식비 카페음료 교통 쇼핑 의료건강 문화여가 통신 공과금 급여 기타수입 기타
-- 식당/카페/편의점/배달 → 식비 또는 카페음료, 교통공사/주유 → 교통, 병원/약국 → 의료건강
-- 날짜가 보이면 정확히 추출 (예: 3월 23일 → ${new Date().getFullYear()}-03-23), 없으면 오늘(${today()})
-- 금액은 콤마/원 제거한 숫자만 (예: -34,000원 → 34000)
-- 취소/환불 내역은 제외
-- 상호명은 앱이름/카드사 제거하고 실제 가게명만 (예: "꺼먹돼지집 | DA@카드의정석" → "꺼먹돼지집")` }
+필드별 _ok 규칙 (이미지에서 명확히 읽혔으면 true, 추정/불확실하면 false):
+- date_ok: 날짜가 이미지에 명확히 표시된 경우 true, 없어서 오늘로 추정하면 false
+- merchant_ok: 상호명이 명확한 경우 true, 불분명하면 false
+- amount_ok: 금액이 명확히 읽힌 경우 true
+- type_ok: 수입/지출 구분이 명확한 경우 true
+- category_ok: 카테고리가 확실한 경우 true, 추정이면 false
+
+기타 규칙:
+- 카테고리: 식비 카페음료 교통 쇼핑 의료건강 문화여가 통신 공과금 급여 기타수입 기타 중 하나
+- 날짜 없으면 오늘(${today()}) + date_ok:false
+- 금액은 숫자만 (콤마/원 제거)
+- 취소/환불 제외
+- 상호명은 실제 가게명만 (앱이름/카드사 제거)` }
             ]
           }]
         })
@@ -778,10 +828,15 @@ async function processImageFromUrl(originalUrl) {
       pendingItems = parsed.map((p,i) => ({
         id: i,
         date: p.date || today(),
+        date_ok: p.date_ok !== false,
         merchant: p.merchant || '(미입력)',
+        merchant_ok: p.merchant_ok !== false,
         amount: p.amount || 0,
+        amount_ok: p.amount_ok !== false,
         type: p.type || 'expense',
+        type_ok: p.type_ok !== false,
         category: CAT_MAP[p.category] || p.category || '기타',
+        category_ok: p.category_ok !== false,
         payment: p.payment || '카드',
         memo: p.memo || '',
         checked: true
@@ -796,31 +851,60 @@ async function processImageFromUrl(originalUrl) {
   }
 }
 
+function needsReview(item) {
+  return !item.date_ok || !item.merchant_ok || !item.amount_ok || !item.type_ok || !item.category_ok;
+}
+
+function fieldStyle(ok) {
+  return 'font-size:11px;padding:6px;border-radius:8px;color:var(--text);width:100%;' +
+    (ok ? 'background:var(--surface2);border:1px solid var(--border);'
+        : 'background:#f5c84218;border:2px solid var(--yellow);');
+}
+
 function renderAIItems() {
   const list = document.getElementById('ai-items-list');
   const count = document.getElementById('ai-count');
-  count.textContent = pendingItems.length + '건 인식됨';
+  const needsCount = pendingItems.filter(needsReview).length;
+  count.textContent = pendingItems.length + '건 인식됨' + (needsCount > 0 ? ' · ⚠️ ' + needsCount + '건 확인 필요' : ' · ✅ 모두 확인됨');
   list.innerHTML = '';
-  pendingItems.forEach((item, i) => {
-    const color = item.type === 'income' ? 'var(--green)' : 'var(--accent2)';
-    const div = document.createElement('div');
-    div.style.cssText = 'background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:12px 14px;';
 
+  pendingItems.forEach((item, i) => {
+    const amtColor = item.type === 'income' ? 'var(--green)' : 'var(--accent2)';
+    const hasIssue = needsReview(item);
     const catOptions = CATS.map(c => '<option value="' + c + '"' + (item.category === c ? ' selected' : '') + '>' + c + '</option>').join('');
+    const div = document.createElement('div');
+    div.style.cssText = 'background:var(--bg);border:1px solid ' + (hasIssue ? 'var(--yellow)' : 'var(--border)') + ';border-radius:12px;padding:12px 14px;';
 
     div.innerHTML =
-      '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">' +
-        '<input type="checkbox" id="chk-' + i + '" ' + (item.checked ? 'checked' : '') + ' onchange="pendingItems[' + i + '].checked=this.checked" style="width:18px;height:18px;accent-color:var(--accent);cursor:pointer;flex-shrink:0">' +
-        '<input type="text" value="' + item.merchant + '" oninput="pendingItems[' + i + '].merchant=this.value" style="flex:1;font-weight:600;font-size:14px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:6px 8px;color:var(--text)">' +
-        '<span style="font-family:var(--mono);font-size:14px;font-weight:600;color:' + color + ';white-space:nowrap">' + (item.type==='income'?'+':'-') + '₩' + item.amount.toLocaleString() + '</span>' +
+      // Row 1: checkbox + merchant + amount
+      '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">' +
+        '<input type="checkbox" id="chk-' + i + '" ' + (item.checked ? 'checked' : '') + ' onchange="pendingItems[' + i + '].checked=this.checked" style="width:18px;height:18px;accent-color:var(--accent);flex-shrink:0">' +
+        '<div style="flex:1;position:relative">' +
+          (!item.merchant_ok ? '<span style="position:absolute;top:-7px;left:6px;font-size:9px;color:var(--yellow);font-weight:700;background:var(--bg);padding:0 3px">⚠️ 확인필요</span>' : '') +
+          '<input type="text" value="' + item.merchant + '" oninput="pendingItems[' + i + '].merchant=this.value;pendingItems[' + i + '].merchant_ok=true;renderAIItems()" style="' + fieldStyle(item.merchant_ok) + 'font-weight:600;font-size:13px">' +
+        '</div>' +
+        '<div style="position:relative;flex-shrink:0">' +
+          (!item.amount_ok ? '<span style="position:absolute;top:-7px;right:0;font-size:9px;color:var(--yellow);font-weight:700;background:var(--bg);padding:0 3px">⚠️</span>' : '') +
+          '<input type="number" value="' + item.amount + '" oninput="pendingItems[' + i + '].amount=parseFloat(this.value)||0;pendingItems[' + i + '].amount_ok=true;renderAIItems()" style="' + fieldStyle(item.amount_ok) + 'width:100px;text-align:right;font-family:var(--mono);color:' + amtColor + '">' +
+        '</div>' +
       '</div>' +
+      // Row 2: date + category + type
       '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">' +
-        '<input type="date" value="' + item.date + '" onchange="pendingItems[' + i + '].date=this.value" style="font-size:11px;padding:6px 6px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text)">' +
-        '<select onchange="pendingItems[' + i + '].category=this.value" style="font-size:11px;padding:6px 6px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text)">' + catOptions + '</select>' +
-        '<select onchange="pendingItems[' + i + '].type=this.value;renderAIItems()" style="font-size:11px;padding:6px 6px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text)">' +
-          '<option value="expense"' + (item.type==='expense'?' selected':'') + '>💸 지출</option>' +
-          '<option value="income"' + (item.type==='income'?' selected':'') + '>💰 수입</option>' +
-        '</select>' +
+        '<div style="position:relative">' +
+          (!item.date_ok ? '<span style="position:absolute;top:-7px;left:6px;font-size:9px;color:var(--yellow);font-weight:700;background:var(--bg);padding:0 3px;z-index:1">⚠️날짜</span>' : '') +
+          '<input type="date" value="' + item.date + '" onchange="pendingItems[' + i + '].date=this.value;pendingItems[' + i + '].date_ok=true;renderAIItems()" style="' + fieldStyle(item.date_ok) + '">' +
+        '</div>' +
+        '<div style="position:relative">' +
+          (!item.category_ok ? '<span style="position:absolute;top:-7px;left:6px;font-size:9px;color:var(--yellow);font-weight:700;background:var(--bg);padding:0 3px;z-index:1">⚠️카테고리</span>' : '') +
+          '<select onchange="pendingItems[' + i + '].category=this.value;pendingItems[' + i + '].category_ok=true;renderAIItems()" style="' + fieldStyle(item.category_ok) + '">' + catOptions + '</select>' +
+        '</div>' +
+        '<div style="position:relative">' +
+          (!item.type_ok ? '<span style="position:absolute;top:-7px;left:6px;font-size:9px;color:var(--yellow);font-weight:700;background:var(--bg);padding:0 3px;z-index:1">⚠️유형</span>' : '') +
+          '<select onchange="pendingItems[' + i + '].type=this.value;pendingItems[' + i + '].type_ok=true;renderAIItems()" style="' + fieldStyle(item.type_ok) + '">' +
+            '<option value="expense"' + (item.type==='expense'?' selected':'') + '>💸 지출</option>' +
+            '<option value="income"' + (item.type==='income'?' selected':'') + '>💰 수입</option>' +
+          '</select>' +
+        '</div>' +
       '</div>';
 
     list.appendChild(div);

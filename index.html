@@ -244,15 +244,13 @@
     background: var(--surface); border-top: 1px solid var(--border);
     display: grid; grid-template-columns: repeat(4, 1fr);
     padding-bottom: var(--safe-bottom);
-    z-index: 9999 !important;
-    isolation: isolate;
+    z-index: 500;
   }
   .tab-item {
     display: flex; flex-direction: column; align-items: center; justify-content: center;
     gap: 4px; cursor: pointer; border: none; background: none; color: var(--muted);
     font-family: var(--font); font-size: 10px; font-weight: 600; transition: color 0.15s;
-    padding: 8px 4px; position: relative; z-index: 9999 !important; pointer-events: all !important;
-    -webkit-tap-highlight-color: rgba(91,141,239,0.15);
+    padding: 8px 4px; -webkit-tap-highlight-color: rgba(91,141,239,0.15);
   }
   .tab-item.active { color: var(--accent); }
   .tab-icon { font-size: 22px; line-height: 1; }
@@ -296,40 +294,7 @@
 
   <!-- Scroll Content -->
   <div class="scroll-area" style="position:relative">
-    <!-- Fountain background -->
-    <div style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none;z-index:0;opacity:0.04;width:320px;height:320px;bottom:calc(var(--tab-h) + var(--safe-bottom))">
-      <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" width="320" height="320">
-        <!-- Base pool -->
-        <ellipse cx="100" cy="175" rx="70" ry="14" fill="#5b8def"/>
-        <ellipse cx="100" cy="173" rx="70" ry="10" fill="none" stroke="#5b8def" stroke-width="2"/>
-        <!-- Pedestal -->
-        <rect x="88" y="130" width="24" height="46" rx="4" fill="#5b8def"/>
-        <ellipse cx="100" cy="130" rx="30" ry="7" fill="#5b8def"/>
-        <!-- Upper basin -->
-        <ellipse cx="100" cy="100" rx="22" ry="5" fill="#5b8def"/>
-        <path d="M78 100 Q72 115 70 130" stroke="#5b8def" stroke-width="3" fill="none"/>
-        <path d="M122 100 Q128 115 130 130" stroke="#5b8def" stroke-width="3" fill="none"/>
-        <!-- Water streams arcing up and out -->
-        <path d="M100 95 Q85 60 70 80" stroke="#5b8def" stroke-width="2.5" fill="none" stroke-linecap="round"/>
-        <path d="M100 95 Q115 60 130 80" stroke="#5b8def" stroke-width="2.5" fill="none" stroke-linecap="round"/>
-        <path d="M100 95 Q80 50 60 75" stroke="#5b8def" stroke-width="2" fill="none" stroke-linecap="round"/>
-        <path d="M100 95 Q120 50 140 75" stroke="#5b8def" stroke-width="2" fill="none" stroke-linecap="round"/>
-        <path d="M100 95 Q100 45 100 70" stroke="#5b8def" stroke-width="2.5" fill="none" stroke-linecap="round"/>
-        <path d="M100 95 Q88 42 75 65" stroke="#5b8def" stroke-width="1.5" fill="none" stroke-linecap="round"/>
-        <path d="M100 95 Q112 42 125 65" stroke="#5b8def" stroke-width="1.5" fill="none" stroke-linecap="round"/>
-        <!-- Water droplets -->
-        <circle cx="70" cy="80" r="2.5" fill="#5b8def"/>
-        <circle cx="130" cy="80" r="2.5" fill="#5b8def"/>
-        <circle cx="100" cy="70" r="2.5" fill="#5b8def"/>
-        <circle cx="60" cy="75" r="2" fill="#5b8def"/>
-        <circle cx="140" cy="75" r="2" fill="#5b8def"/>
-        <circle cx="75" cy="65" r="1.8" fill="#5b8def"/>
-        <circle cx="125" cy="65" r="1.8" fill="#5b8def"/>
-        <!-- Pool water ripple -->
-        <ellipse cx="100" cy="175" rx="50" ry="6" fill="none" stroke="#5b8def" stroke-width="1.5" opacity="0.5"/>
-        <ellipse cx="100" cy="175" rx="30" ry="4" fill="none" stroke="#5b8def" stroke-width="1" opacity="0.3"/>
-      </svg>
-    </div>
+
 
     <!-- Page: AI Upload -->
     <div class="page active" id="page-upload">
@@ -432,9 +397,9 @@
     <!-- Page: Summary -->
     <div class="page" id="page-summary">
       <!-- 연간/월간 탭 -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:16px">
-        <button id="tab-monthly" onclick="setSummaryMode('monthly')" style="padding:11px;font-size:14px;font-weight:700;font-family:var(--font);border:none;cursor:pointer;background:var(--accent);color:#fff">📅 월간</button>
-        <button id="tab-yearly" onclick="setSummaryMode('yearly')" style="padding:11px;font-size:14px;font-weight:700;font-family:var(--font);border:none;cursor:pointer;background:var(--bg);color:var(--muted)">📆 연간</button>
+      <div style="display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:16px;position:relative;z-index:2">
+        <button id="tab-monthly" onclick="setSummaryMode('monthly')" style="padding:11px;font-size:14px;font-weight:700;font-family:var(--font);border:none;cursor:pointer;background:var(--accent);color:#fff;position:relative;z-index:2;pointer-events:all">📅 월간</button>
+        <button id="tab-yearly" onclick="setSummaryMode('yearly')" style="padding:11px;font-size:14px;font-weight:700;font-family:var(--font);border:none;cursor:pointer;background:var(--bg);color:var(--muted);position:relative;z-index:2;pointer-events:all">📆 연간</button>
       </div>
 
       <!-- 월간 뷰 -->

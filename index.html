@@ -183,8 +183,7 @@
   .entry-list { display: flex; flex-direction: column; gap: 8px; }
   .entry-card {
     background: var(--surface); border: 1px solid var(--border);
-    border-radius: 14px; padding: 14px 16px;
-    display: flex; align-items: center; gap: 12px;
+    border-radius: 14px;
   }
   .entry-icon {
     width: 40px; height: 40px; border-radius: 12px;
@@ -200,7 +199,7 @@
   .entry-date-group { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin: 14px 0 8px; }
 
   /* Swipe delete */
-  .entry-card { position: relative; overflow: hidden; }
+  .entry-card { position: relative; overflow: hidden; min-height: 64px; }
   .delete-btn {
     position: absolute; right: 0; top: 0; bottom: 0; width: 72px;
     background: var(--accent2); color: #fff; border: none; cursor: pointer;
@@ -210,7 +209,7 @@
   }
   .entry-card.swiped .delete-btn { transform: translateX(0); }
   .entry-card.swiped .entry-content { transform: translateX(-72px); }
-  .entry-content { transition: transform 0.2s; display: flex; align-items: center; gap: 12px; width: 100%; }
+  .entry-content { transition: transform 0.2s; display: flex; align-items: center; gap: 12px; width: 100%; padding: 14px 16px; }
 
   /* Summary page */
   .month-scroll { display: flex; gap: 8px; overflow-x: auto; margin-bottom: 16px; padding-bottom: 4px; scrollbar-width: none; }
@@ -283,7 +282,7 @@
     <div class="top-bar-subtitle">너의 분수를 알라</div>
     <button class="top-bar-month" id="top-month" onclick="openMonthPicker()" style="background:none;border:1px solid var(--border);border-radius:20px;padding:4px 10px;cursor:pointer;display:flex;align-items:center;gap:4px;font-family:var(--font);color:var(--text);font-size:13px;font-weight:500;white-space:nowrap">2026년 3월 <span style="font-size:10px;opacity:0.6">▼</span></button>
     <!-- Month Picker Overlay -->
-    <div id="month-overlay" style="display:none;position:fixed;inset:0;background:#00000088;z-index:200;align-items:flex-end" onclick="if(event.target===this)closeMonthPicker()">
+    <div id="month-overlay" style="display:none;position:fixed;inset:0;background:#00000088;z-index:600;align-items:flex-end" onclick="if(event.target===this)closeMonthPicker()">
       <div style="background:var(--surface);border-radius:20px 20px 0 0;width:100%;padding:20px 20px calc(20px + env(safe-area-inset-bottom,0px));max-height:75vh;overflow-y:auto;-webkit-overflow-scrolling:touch">
         <div style="width:40px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 16px;"></div>
         <div style="font-size:15px;font-weight:700;margin-bottom:16px;text-align:center">월 선택</div>
@@ -862,7 +861,7 @@ async function processImageFromUrl(originalUrl) {
       const data = await res.json();
       text = data.content?.find(b=>b.type==='text')?.text || '';
       // Show raw response for debugging
-      document.getElementById('ai-debug').textContent = text.slice(0, 300);
+      document.getElementById('ai-debug').textContent = text.slice(0, 500);
       document.getElementById('ai-debug-wrap').style.display = 'block';
       // Try to extract JSON array or object from response
       let clean = text.replace(/```json|```/g,'').trim();
@@ -873,15 +872,16 @@ async function processImageFromUrl(originalUrl) {
       else if (objMatch) clean = '[' + objMatch[0] + ']';
       let parsed = JSON.parse(clean);
       if (!Array.isArray(parsed)) parsed = [parsed];
-      const rawItems = parsed.filter(p => (p.amount > 0) && (p.merchant && p.merchant.trim() !== '' && p.merchant !== '(미입력)'));
+      // Accept all items, mark missing fields for manual review
+      const rawItems = parsed.filter(p => p && typeof p === 'object');
       pendingItems = rawItems.map((p,i) => ({
         id: i,
         date: p.date || today(),
         date_ok: p.date_ok !== false,
         merchant: p.merchant || '',
-        merchant_ok: !!(p.merchant && p.merchant_ok !== false),
-        amount: p.amount || 0,
-        amount_ok: !!(p.amount && p.amount_ok !== false),
+        merchant_ok: !!(p.merchant && p.merchant.trim() && p.merchant_ok !== false),
+        amount: parseFloat(p.amount) || 0,
+        amount_ok: !!(parseFloat(p.amount) > 0 && p.amount_ok !== false),
         type: p.type || 'expense',
         type_ok: p.type_ok !== false,
         category: CAT_MAP[p.category] || p.category || '기타',
@@ -1143,7 +1143,7 @@ function renderList() {
             '</div>' +
             '<div class="entry-amount ' + e.type + '">' + (e.type==='income'?'+':'−') + fmt(e.amount) + '</div>' +
           '</div>' +
-          '<button class="delete-btn" onclick="deleteEntry(' + e.id + ')">삭제</button>';
+          '<button class="delete-btn" onclick="event.stopPropagation();deleteEntry(' + e.id + ')">삭제</button>';
         let startX = 0;
         card.addEventListener('touchstart', ev => { startX = ev.touches[0].clientX; }, {passive:true});
         card.addEventListener('touchend', ev => {

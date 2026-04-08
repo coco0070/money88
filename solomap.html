@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>솔로맵</title>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;900&display=swap" rel="stylesheet">
-<script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=2dd56d53719b5e7216c920127baaf78f&libraries=services"></script>
+<script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=2dd56d53719b5e7216c920127baaf78f&libraries=services&autoload=false"></script>
 <style>
 :root {
   --bg: #f5f0eb;
@@ -778,12 +778,10 @@ function updateTopH() {
   const h = topBar.offsetHeight;
   document.querySelector('.map-area').style.marginTop = h + 'px';
 }
-setTimeout(() => {
-  updateTopH();
-  if (window.kakao && kakao.maps) {
-    kakao.maps.load(initKakaoMap);
-  }
-}, 200);
+updateTopH();
+kakao.maps.load(() => {
+  initKakaoMap();
+});
 </script>
 </body>
 </html>

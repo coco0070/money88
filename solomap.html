@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>솔로맵</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;900&display=swap" rel="stylesheet">
+<script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=2dd56d53719b5e7216c920127baaf78f&libraries=services"></script>
+<style>
+:root {
+  --bg: #f5f0eb;
+  --surface: #ffffff;
+  --border: #e8e0d8;
+  --text: #1a1510;
+  --muted: #9a8f85;
+  --accent: #ff4d6d;
+  --accent2: #ff8c42;
+  --safe: #3d9970;
+  --warn: #ff4d6d;
+  --tag-bg: #fff3f5;
+  --font: 'Noto Sans KR', sans-serif;
+  --tab-h: 64px;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --top-h: 120px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+html, body { height: 100%; overflow: hidden; font-family: var(--font); background: var(--bg); }
+
+.app { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
+
+/* Top Bar */
+.top-bar {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+  background: var(--surface);
+  padding: calc(env(safe-area-inset-top, 12px) + 12px) 16px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.top-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.logo { font-size: 22px; font-weight: 900; color: var(--text); letter-spacing: -1px; }
+.logo span { color: var(--accent); }
+.top-btns { display: flex; gap: 8px; }
+.top-btn {
+  padding: 7px 14px; border-radius: 20px; font-size: 12px; font-weight: 700;
+  border: none; cursor: pointer; font-family: var(--font);
+}
+.btn-report { background: var(--accent); color: #fff; }
+.btn-post { background: var(--text); color: #fff; }
+
+/* Filter chips */
+.filter-row { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
+.filter-row::-webkit-scrollbar { display: none; }
+.chip {
+  flex-shrink: 0; padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 700;
+  border: 1.5px solid var(--border); background: var(--surface); color: var(--muted);
+  cursor: pointer; transition: all 0.15s; white-space: nowrap;
+}
+.chip.active { background: var(--text); color: #fff; border-color: var(--text); }
+.chip.danger { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+/* Map Area */
+.map-area {
+  flex: 1; overflow: hidden; position: relative;
+  margin-top: var(--top-h);
+  margin-bottom: calc(var(--tab-h) + var(--safe-bottom));
+}
+
+/* Fake map SVG background */
+.map-bg {
+  width: 100%; height: 100%;
+  background: #e8e0d0;
+  position: relative; overflow: hidden;
+}
+.map-svg { width: 100%; height: 100%; position: absolute; top: 0; left: 0; }
+
+/* Map buttons */
+.map-btns {
+  position: absolute; right: 14px; top: 14px; display: flex; flex-direction: column; gap: 8px; z-index: 10;
+}
+.map-btn {
+  width: 40px; height: 40px; border-radius: 12px; background: var(--surface);
+  border: 1px solid var(--border); display: flex; align-items: center; justify-content: center;
+  font-size: 18px; cursor: pointer; box-shadow: 0 2px 8px #0001;
+}
+
+/* Markers */
+.marker {
+  position: absolute; transform: translate(-50%, -100%);
+  cursor: pointer; transition: transform 0.15s;
+  z-index: 20;
+}
+.marker:active { transform: translate(-50%, -100%) scale(0.92); }
+.marker-pin {
+  width: 44px; height: 50px; position: relative;
+}
+.marker-bubble {
+  background: var(--surface); border-radius: 12px; padding: 5px 8px;
+  font-size: 10px; font-weight: 700; white-space: nowrap;
+  box-shadow: 0 3px 12px #0002; border: 1.5px solid var(--border);
+  display: flex; align-items: center; gap: 4px;
+}
+.marker-bubble::after {
+  content: ''; position: absolute; bottom: -7px; left: 50%;
+  transform: translateX(-50%);
+  border: 4px solid transparent; border-top-color: var(--border);
+}
+.marker-bubble::before {
+  content: ''; position: absolute; bottom: -5px; left: 50%;
+  transform: translateX(-50%);
+  border: 4px solid transparent; border-top-color: var(--surface);
+  z-index: 1;
+}
+.marker-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+}
+
+/* Bottom sheet - place card */
+.place-card {
+  position: fixed; bottom: calc(var(--tab-h) + var(--safe-bottom));
+  left: 0; right: 0; z-index: 90;
+  background: var(--surface); border-radius: 20px 20px 0 0;
+  padding: 16px; box-shadow: 0 -4px 24px #0001;
+  transform: translateY(100%); transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1);
+  border-top: 1px solid var(--border);
+}
+.place-card.show { transform: translateY(0); }
+.place-card-handle { width: 36px; height: 4px; background: var(--border); border-radius: 2px; margin: 0 auto 14px; }
+.place-card-header { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px; }
+.place-emoji { font-size: 32px; flex-shrink: 0; }
+.place-title { font-size: 17px; font-weight: 800; letter-spacing: -0.5px; margin-bottom: 3px; }
+.place-addr { font-size: 12px; color: var(--muted); }
+.place-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+.place-tag {
+  padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 700;
+}
+.tag-danger { background: #fff0f3; color: var(--accent); }
+.tag-safe { background: #f0fff8; color: var(--safe); }
+.tag-neutral { background: #f5f0eb; color: var(--muted); }
+.place-stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 14px; }
+.stat-item { background: var(--bg); border-radius: 10px; padding: 10px; text-align: center; }
+.stat-num { font-size: 18px; font-weight: 800; }
+.stat-label { font-size: 10px; color: var(--muted); font-weight: 600; margin-top: 2px; }
+.place-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.action-btn {
+  padding: 12px; border-radius: 12px; font-size: 13px; font-weight: 700;
+  border: none; cursor: pointer; font-family: var(--font);
+}
+.action-primary { background: var(--accent); color: #fff; }
+.action-secondary { background: var(--bg); color: var(--text); border: 1.5px solid var(--border); }
+
+/* Tab Bar */
+.tab-bar {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  height: calc(var(--tab-h) + var(--safe-bottom));
+  background: var(--surface); border-top: 1px solid var(--border);
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  padding-bottom: var(--safe-bottom);
+  z-index: 200;
+}
+.tab-item {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 3px; cursor: pointer; border: none; background: none;
+  font-size: 10px; font-weight: 700; color: var(--muted); font-family: var(--font);
+  transition: color 0.15s;
+}
+.tab-item.active { color: var(--accent); }
+.tab-icon { font-size: 22px; }
+
+/* 솔로방 (Board) page */
+.page { display: none; position: fixed; inset: 0; background: var(--bg); z-index: 150; flex-direction: column; }
+.page.show { display: flex; }
+.page-header {
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  padding: calc(env(safe-area-inset-top, 12px) + 12px) 16px 12px;
+  flex-shrink: 0;
+}
+.page-title { font-size: 20px; font-weight: 900; letter-spacing: -0.5px; }
+.page-scroll { flex: 1; overflow-y: auto; padding: 14px 16px; padding-bottom: calc(var(--tab-h) + var(--safe-bottom) + 20px); }
+
+/* Board posts */
+.board-tabs { display: flex; gap: 0; border-bottom: 1.5px solid var(--border); margin-bottom: 14px; }
+.board-tab {
+  flex: 1; padding: 10px; text-align: center; font-size: 13px; font-weight: 700;
+  color: var(--muted); cursor: pointer; border: none; background: none; font-family: var(--font);
+  border-bottom: 2.5px solid transparent; margin-bottom: -1.5px;
+}
+.board-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+.post-card {
+  background: var(--surface); border-radius: 16px; padding: 14px 16px;
+  margin-bottom: 10px; border: 1px solid var(--border);
+}
+.post-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.post-avatar {
+  width: 32px; height: 32px; border-radius: 50%; background: var(--bg);
+  display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0;
+}
+.post-user { font-size: 12px; font-weight: 700; }
+.post-time { font-size: 11px; color: var(--muted); margin-left: auto; }
+.post-title { font-size: 15px; font-weight: 700; margin-bottom: 5px; letter-spacing: -0.3px; }
+.post-body { font-size: 13px; color: #555; line-height: 1.5; margin-bottom: 10px; }
+.post-location { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; color: var(--accent); background: var(--tag-bg); padding: 3px 10px; border-radius: 20px; margin-bottom: 10px; }
+.post-footer { display: flex; align-items: center; gap: 12px; }
+.post-action { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); font-weight: 600; cursor: pointer; border: none; background: none; font-family: var(--font); }
+
+/* Write button */
+.fab {
+  position: fixed; right: 16px; bottom: calc(var(--tab-h) + var(--safe-bottom) + 14px);
+  width: 52px; height: 52px; border-radius: 50%;
+  background: var(--accent); color: #fff; font-size: 24px;
+  border: none; cursor: pointer; z-index: 160;
+  box-shadow: 0 4px 16px #ff4d6d44;
+  display: none; align-items: center; justify-content: center;
+}
+.fab.show { display: flex; }
+
+/* Write modal */
+.modal-overlay {
+  display: none; position: fixed; inset: 0; background: #0005; z-index: 300;
+  align-items: flex-end;
+}
+.modal-overlay.show { display: flex; }
+.modal {
+  background: var(--surface); border-radius: 24px 24px 0 0;
+  width: 100%; padding: 20px 16px calc(20px + env(safe-area-inset-bottom, 0px));
+  max-height: 85vh; overflow-y: auto;
+}
+.modal-title { font-size: 18px; font-weight: 800; margin-bottom: 16px; }
+.modal-input {
+  width: 100%; border: 1.5px solid var(--border); border-radius: 12px;
+  padding: 12px 14px; font-size: 14px; font-family: var(--font);
+  background: var(--bg); color: var(--text); margin-bottom: 10px; outline: none;
+}
+.modal-input:focus { border-color: var(--accent); }
+.modal-textarea { min-height: 100px; resize: none; }
+.modal-label { font-size: 12px; font-weight: 700; color: var(--muted); margin-bottom: 6px; display: block; }
+.risk-select { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 14px; }
+.risk-btn {
+  padding: 10px 6px; border-radius: 10px; font-size: 12px; font-weight: 700;
+  border: 1.5px solid var(--border); background: var(--bg); cursor: pointer; font-family: var(--font);
+  text-align: center; transition: all 0.15s;
+}
+.risk-btn.selected-high { background: #fff0f3; border-color: var(--accent); color: var(--accent); }
+.risk-btn.selected-mid { background: #fff8f0; border-color: var(--accent2); color: var(--accent2); }
+.risk-btn.selected-low { background: #f0fff8; border-color: var(--safe); color: var(--safe); }
+.modal-submit { width: 100%; padding: 14px; border-radius: 14px; background: var(--accent); color: #fff; font-size: 15px; font-weight: 800; border: none; cursor: pointer; font-family: var(--font); }
+
+/* Toast */
+.toast {
+  position: fixed; top: calc(env(safe-area-inset-top,0px) + 70px); left: 50%;
+  transform: translateX(-50%) translateY(-10px);
+  background: var(--text); color: #fff; border-radius: 20px;
+  padding: 10px 20px; font-size: 13px; font-weight: 700;
+  opacity: 0; transition: all 0.3s; z-index: 999; white-space: nowrap;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* My page */
+.my-profile { background: var(--surface); border-radius: 20px; padding: 20px; margin-bottom: 14px; border: 1px solid var(--border); text-align: center; }
+.my-avatar { font-size: 56px; margin-bottom: 8px; }
+.my-name { font-size: 18px; font-weight: 800; margin-bottom: 4px; }
+.my-badge { display: inline-block; background: var(--tag-bg); color: var(--accent); font-size: 12px; font-weight: 700; padding: 4px 12px; border-radius: 20px; }
+.my-stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin: 16px 0 0; }
+.my-stat { background: var(--bg); border-radius: 12px; padding: 12px; text-align: center; }
+.my-stat-num { font-size: 20px; font-weight: 900; color: var(--accent); }
+.my-stat-label { font-size: 10px; color: var(--muted); font-weight: 600; margin-top: 2px; }
+
+.menu-item {
+  background: var(--surface); border-radius: 14px; padding: 16px;
+  display: flex; align-items: center; gap: 12px; margin-bottom: 8px;
+  border: 1px solid var(--border); cursor: pointer;
+  font-size: 14px; font-weight: 600;
+}
+.menu-icon { font-size: 20px; width: 28px; text-align: center; }
+.menu-arrow { margin-left: auto; color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+
+<!-- Top Bar (map only) -->
+<div class="top-bar" id="map-topbar">
+  <div class="top-row">
+    <div class="logo">솔로<span>맵</span> 💔</div>
+    <div class="top-btns">
+      <button class="top-btn btn-report" onclick="openModal()">📍 제보하기</button>
+      <button class="top-btn btn-post" onclick="showTab('board')">💬 솔로방</button>
+    </div>
+  </div>
+  <div class="filter-row">
+    <div class="chip active" onclick="setFilter(this,'all')">전체</div>
+    <div class="chip danger" onclick="setFilter(this,'danger')">💀 절대금지</div>
+    <div class="chip" onclick="setFilter(this,'warn')">⚠️ 주의구역</div>
+    <div class="chip" onclick="setFilter(this,'safe')">✅ 솔로성지</div>
+    <div class="chip" onclick="setFilter(this,'food')">🍜 혼밥가능</div>
+    <div class="chip" onclick="setFilter(this,'cafe')">☕ 혼카페</div>
+  </div>
+</div>
+
+<!-- Map -->
+<div class="map-area" id="map-area">
+  <div class="map-bg">
+    <!-- Fake street map SVG -->
+    <svg class="map-svg" viewBox="0 0 400 700" preserveAspectRatio="xMidYMid slice">
+      <!-- Background -->
+      <rect width="400" height="700" fill="#ede8df"/>
+      <!-- Parks -->
+      <rect x="40" y="80" width="80" height="60" rx="8" fill="#c8e6c9" opacity="0.7"/>
+      <rect x="280" y="300" width="60" height="80" rx="8" fill="#c8e6c9" opacity="0.7"/>
+      <rect x="150" y="500" width="70" height="50" rx="8" fill="#c8e6c9" opacity="0.7"/>
+      <!-- Major roads -->
+      <rect x="0" y="180" width="400" height="20" fill="#fff" opacity="0.8"/>
+      <rect x="0" y="380" width="400" height="20" fill="#fff" opacity="0.8"/>
+      <rect x="0" y="560" width="400" height="20" fill="#fff" opacity="0.8"/>
+      <rect x="120" y="0" width="20" height="700" fill="#fff" opacity="0.8"/>
+      <rect x="270" y="0" width="20" height="700" fill="#fff" opacity="0.8"/>
+      <!-- Minor roads -->
+      <rect x="0" y="280" width="400" height="10" fill="#fff" opacity="0.5"/>
+      <rect x="0" y="460" width="400" height="10" fill="#fff" opacity="0.5"/>
+      <rect x="60" y="0" width="10" height="700" fill="#fff" opacity="0.5"/>
+      <rect x="190" y="0" width="10" height="700" fill="#fff" opacity="0.5"/>
+      <rect x="330" y="0" width="10" height="700" fill="#fff" opacity="0.5"/>
+      <!-- Buildings -->
+      <rect x="30" y="200" width="40" height="30" rx="3" fill="#d4cec5"/>
+      <rect x="80" y="200" width="30" height="30" rx="3" fill="#d4cec5"/>
+      <rect x="145" y="200" width="35" height="30" rx="3" fill="#d4cec5"/>
+      <rect x="200" y="200" width="55" height="30" rx="3" fill="#d4cec5"/>
+      <rect x="295" y="200" width="40" height="30" rx="3" fill="#d4cec5"/>
+      <rect x="345" y="200" width="40" height="30" rx="3" fill="#d4cec5"/>
+      <rect x="30" y="300" width="50" height="40" rx="3" fill="#d4cec5"/>
+      <rect x="145" y="300" width="30" height="40" rx="3" fill="#d4cec5"/>
+      <rect x="200" y="300" width="55" height="40" rx="3" fill="#d4cec5"/>
+      <rect x="345" y="300" width="35" height="40" rx="3" fill="#d4cec5"/>
+      <rect x="30" y="400" width="45" height="40" rx="3" fill="#d4cec5"/>
+      <rect x="85" y="400" width="25" height="40" rx="3" fill="#d4cec5"/>
+      <rect x="145" y="400" width="35" height="40" rx="3" fill="#d4cec5"/>
+      <rect x="200" y="400" width="55" height="40" rx="3" fill="#d4cec5"/>
+      <rect x="295" y="400" width="25" height="40" rx="3" fill="#d4cec5"/>
+      <rect x="345" y="400" width="35" height="40" rx="3" fill="#d4cec5"/>
+      <!-- Station dots -->
+      <circle cx="140" cy="190" r="8" fill="#5c6bc0" opacity="0.8"/>
+      <circle cx="280" cy="390" r="8" fill="#5c6bc0" opacity="0.8"/>
+      <circle cx="140" cy="570" r="8" fill="#5c6bc0" opacity="0.8"/>
+    </svg>
+
+    <!-- Markers -->
+    <div class="marker" style="left:58%;top:22%" onclick="showPlace(0)">
+      <div class="marker-bubble" style="border-color:#ff4d6d">
+        <div class="marker-dot" style="background:#ff4d6d"></div>
+        💀 한강공원
+      </div>
+    </div>
+    <div class="marker" style="left:35%;top:42%" onclick="showPlace(1)">
+      <div class="marker-bubble" style="border-color:#ff8c42">
+        <div class="marker-dot" style="background:#ff8c42"></div>
+        ⚠️ 홍대 걷고싶은거리
+      </div>
+    </div>
+    <div class="marker" style="left:72%;top:55%" onclick="showPlace(2)">
+      <div class="marker-bubble" style="border-color:#3d9970">
+        <div class="marker-dot" style="background:#3d9970"></div>
+        ✅ 혼밥성지
+      </div>
+    </div>
+    <div class="marker" style="left:25%;top:65%" onclick="showPlace(3)">
+      <div class="marker-bubble" style="border-color:#3d9970">
+        <div class="marker-dot" style="background:#3d9970"></div>
+        ☕ 솔로카페
+      </div>
+    </div>
+    <div class="marker" style="left:50%;top:75%" onclick="showPlace(4)">
+      <div class="marker-bubble" style="border-color:#ff4d6d">
+        <div class="marker-dot" style="background:#ff4d6d"></div>
+        💀 롯데월드
+      </div>
+    </div>
+
+    <!-- Map buttons -->
+    <div class="map-btns">
+      <div class="map-btn">🔍</div>
+      <div class="map-btn">❤️</div>
+      <div class="map-btn" onclick="showToast('현재 위치로 이동')">📍</div>
+    </div>
+  </div>
+</div>
+
+<!-- Place Card -->
+<div class="place-card" id="place-card">
+  <div class="place-card-handle"></div>
+  <div class="place-card-header">
+    <div class="place-emoji" id="pc-emoji">💀</div>
+    <div>
+      <div class="place-title" id="pc-title">한강공원</div>
+      <div class="place-addr" id="pc-addr">서울 영등포구 여의동로 330</div>
+    </div>
+  </div>
+  <div class="place-tags" id="pc-tags"></div>
+  <div class="place-stats">
+    <div class="stat-item">
+      <div class="stat-num" id="pc-danger" style="color:var(--accent)">98%</div>
+      <div class="stat-label">커플지수</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-num" id="pc-reports">247</div>
+      <div class="stat-label">제보수</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-num" id="pc-survivor" style="color:var(--safe)">3명</div>
+      <div class="stat-label">생존자</div>
+    </div>
+  </div>
+  <div class="place-actions">
+    <button class="action-btn action-secondary" onclick="closePlace()">닫기</button>
+    <button class="action-btn action-primary" onclick="showToast('제보 감사합니다 💔')">나도 제보</button>
+  </div>
+</div>
+
+<!-- Board Page -->
+<div class="page" id="page-board">
+  <div class="page-header">
+    <div class="top-row" style="margin-bottom:0">
+      <div class="page-title">솔로방 💬</div>
+      <button onclick="showTab('map')" style="background:none;border:none;font-size:20px;cursor:pointer">✕</button>
+    </div>
+  </div>
+  <div class="page-scroll">
+    <div class="board-tabs">
+      <button class="board-tab active" onclick="setBoardTab(this,'all')">전체</button>
+      <button class="board-tab" onclick="setBoardTab(this,'report')">제보</button>
+      <button class="board-tab" onclick="setBoardTab(this,'chat')">수다</button>
+      <button class="board-tab" onclick="setBoardTab(this,'tip')">꿀팁</button>
+    </div>
+    <div id="board-list"></div>
+  </div>
+</div>
+
+<!-- My Page -->
+<div class="page" id="page-my">
+  <div class="page-header">
+    <div class="page-title">마이페이지 👤</div>
+  </div>
+  <div class="page-scroll">
+    <div class="my-profile">
+      <div class="my-avatar">🥲</div>
+      <div class="my-name">솔로전사_뱅</div>
+      <div class="my-badge">👑 골드 솔로 · Lv.7</div>
+      <div class="my-stats">
+        <div class="my-stat">
+          <div class="my-stat-num">24</div>
+          <div class="my-stat-label">제보수</div>
+        </div>
+        <div class="my-stat">
+          <div class="my-stat-num">13</div>
+          <div class="my-stat-label">생존기록</div>
+        </div>
+        <div class="my-stat">
+          <div class="my-stat-num">156</div>
+          <div class="my-stat-label">받은공감</div>
+        </div>
+      </div>
+    </div>
+    <div class="menu-item" onclick="showToast('준비 중')"><span class="menu-icon">📍</span>내 제보 목록<span class="menu-arrow">›</span></div>
+    <div class="menu-item" onclick="showToast('준비 중')"><span class="menu-icon">❤️</span>저장한 장소<span class="menu-arrow">›</span></div>
+    <div class="menu-item" onclick="showToast('준비 중')"><span class="menu-icon">🏆</span>솔로 랭킹<span class="menu-arrow">›</span></div>
+    <div class="menu-item" onclick="showToast('준비 중')"><span class="menu-icon">⚙️</span>설정<span class="menu-arrow">›</span></div>
+  </div>
+</div>
+
+<!-- Write FAB -->
+<button class="fab" id="fab" onclick="openModal()">✏️</button>
+
+<!-- Write Modal -->
+<div class="modal-overlay" id="modal-overlay" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <div class="modal-title">📍 새 제보하기</div>
+    <span class="modal-label">장소명</span>
+    <input class="modal-input" placeholder="예: 한강공원 이촌지구" id="modal-place">
+    <span class="modal-label">어떤 상황인가요?</span>
+    <textarea class="modal-input modal-textarea" placeholder="솔로로 갔다가 멘탈 나간 사연을 공유해주세요 💔" id="modal-body"></textarea>
+    <span class="modal-label">커플 위험도</span>
+    <div class="risk-select">
+      <div class="risk-btn" id="risk-high" onclick="setRisk('high')">💀 절대금지<br><small>커플천지</small></div>
+      <div class="risk-btn" id="risk-mid" onclick="setRisk('mid')">⚠️ 주의<br><small>가끔출몰</small></div>
+      <div class="risk-btn" id="risk-low" onclick="setRisk('low')">✅ 안전<br><small>솔로ok</small></div>
+    </div>
+    <button class="modal-submit" onclick="submitPost()">제보 올리기 🚨</button>
+  </div>
+</div>
+
+<!-- Tab Bar -->
+<nav class="tab-bar">
+  <button class="tab-item active" id="tab-map" onclick="showTab('map')">
+    <span class="tab-icon">🗺️</span>솔로맵
+  </button>
+  <button class="tab-item" id="tab-board" onclick="showTab('board')">
+    <span class="tab-icon">💬</span>솔로방
+  </button>
+  <button class="tab-item" id="tab-my" onclick="showTab('my')">
+    <span class="tab-icon">👤</span>마이
+  </button>
+</nav>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ---- Data ----
+const places = [
+  {
+    emoji: '💀', title: '한강공원 여의도',
+    addr: '서울 영등포구 여의동로 330',
+    tags: [{t:'💀 절대금지',c:'tag-danger'},{t:'커플성지',c:'tag-danger'},{t:'주말지옥',c:'tag-danger'}],
+    danger: '99%', reports: 247, survivor: 3,
+    comment: '치맥커플 500쌍 목격. 솔로생존율 0%에 수렴'
+  },
+  {
+    emoji: '⚠️', title: '홍대 걷고싶은거리',
+    addr: '서울 마포구 어울마당로',
+    tags: [{t:'⚠️ 주의구역',c:'tag-neutral'},{t:'주말은위험',c:'tag-neutral'},{t:'평일ok',c:'tag-safe'}],
+    danger: '72%', reports: 183, survivor: 31,
+    comment: '평일 낮엔 괜찮음. 금토 저녁은 핵지옥'
+  },
+  {
+    emoji: '✅', title: '혼밥성지 우동가게',
+    addr: '서울 강남구 역삼동 824-1',
+    tags: [{t:'✅ 솔로성지',c:'tag-safe'},{t:'1인석보유',c:'tag-safe'},{t:'혼밥추천',c:'tag-safe'}],
+    danger: '12%', reports: 94, survivor: 89,
+    comment: '1인석 전용 코너 있음. 솔로들의 성지 인증'
+  },
+  {
+    emoji: '☕', title: '북카페 솔로존',
+    addr: '서울 마포구 합정동 366-8',
+    tags: [{t:'✅ 혼카페',c:'tag-safe'},{t:'1인좌석多',c:'tag-safe'},{t:'콘센트ok',c:'tag-safe'}],
+    danger: '8%', reports: 67, survivor: 112,
+    comment: '1인 좌석만 20개. 커플은 자리없어서 못앉음ㅋ'
+  },
+  {
+    emoji: '💀', title: '롯데월드',
+    addr: '서울 송파구 올림픽로 240',
+    tags: [{t:'💀 절대금지',c:'tag-danger'},{t:'커플놀이터',c:'tag-danger'},{t:'멘탈붕괴',c:'tag-danger'}],
+    danger: '97%', reports: 312, survivor: 1,
+    comment: '생존자 1명은 사실 눈감고 다닌 거라는 제보 있음'
+  }
+];
+
+const posts = [
+  { emoji:'😤', user:'솔로전사_익명1', time:'방금 전', type:'report', title:'한강 갔다가 멘탈나간 후기', body:'오늘 한강 갔는데 커플이 너무 많아서 치킨 혼자 먹다가 왜 사냐는 생각이... 절대 가지 마세요 💀', location:'한강공원 여의도', likes:84, comments:23 },
+  { emoji:'🥲', user:'영원한솔로', time:'3분 전', type:'tip', title:'혼밥 꿀팁 모음 (커플 없는 식당 리스트)', body:'1인석 있는 곳만 3년 동안 모았습니다. 우동집, 라멘집, 초밥집 위주로 정리했어요. 댓글로 추가해주세요!', location:'서울 전역', likes:156, comments:47 },
+  { emoji:'😭', user:'솔로8년차', time:'11분 전', type:'report', title:'홍대 걷고싶은거리 주말 현황', body:'방금 정찰 다녀왔는데 오늘은 좀 심하네요. 10쌍 중 9쌍이 손잡고 다님. 주말은 진짜 위험해요', location:'홍대 걷고싶은거리', likes:42, comments:18 },
+  { emoji:'😌', user:'솔로라이프', time:'22분 전', type:'chat', title:'혼자 다니기 좋은 카페 발견했어요!', body:'합정에 북카페 발견! 1인석만 있어서 커플이 아예 못 앉음ㅋㅋ 솔로들의 성지로 등록 완료~', location:'합정 북카페', likes:203, comments:61 },
+  { emoji:'🤬', user:'커플피해자', time:'35분 전', type:'report', title:'롯데월드는 진짜 가지 마세요', body:'친구들이랑 갔는데 친구들이 다 커플이고 저만 솔로... 세상 모든 커플이 롯데월드에 모인 것 같음', location:'롯데월드', likes:91, comments:29 },
+  { emoji:'😎', user:'솔로마스터', time:'1시간 전', type:'tip', title:'솔로 서울 여행 코스 추천', body:'혼자여도 행복한 코스: 성수 카페거리 → 혼자 먹기 좋은 라멘집 → 독립서점 → 혼술바 순으로 다니면 완벽한 솔로데이 가능!', location:'성수동', likes:178, comments:55 },
+];
+
+// ---- State ----
+let currentTab = 'map';
+let selectedRisk = null;
+
+// ---- Place Card ----
+function showPlace(idx) {
+  const p = places[idx];
+  document.getElementById('pc-emoji').textContent = p.emoji;
+  document.getElementById('pc-title').textContent = p.title;
+  document.getElementById('pc-addr').textContent = p.addr;
+  document.getElementById('pc-danger').textContent = p.danger;
+  document.getElementById('pc-reports').textContent = p.reports;
+  document.getElementById('pc-survivor').textContent = p.survivor + '명';
+  const tags = document.getElementById('pc-tags');
+  tags.innerHTML = p.tags.map(t => `<span class="place-tag ${t.c}">${t.t}</span>`).join('') +
+    `<span class="place-tag tag-neutral" style="color:#555">💬 ${p.comment.slice(0,15)}...</span>`;
+  document.getElementById('place-card').classList.add('show');
+}
+function closePlace() {
+  document.getElementById('place-card').classList.remove('show');
+}
+
+// ---- Filter ----
+function setFilter(el, type) {
+  document.querySelectorAll('.filter-row .chip').forEach(c => c.classList.remove('active','danger'));
+  el.classList.add('active');
+  if (type === 'danger') el.classList.add('danger');
+  currentFilter = type;
+  const filterMap = { danger:'danger', warn:'warn', safe:'safe', food:'safe', cafe:'safe' };
+  renderMarkers(filterMap[type] || 'all');
+  showToast(type === 'all' ? '전체 표시' : el.textContent.trim() + ' 필터 적용');
+}
+
+// ---- Tabs ----
+function showTab(name) {
+  currentTab = name;
+  document.querySelectorAll('.tab-item').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-' + name)?.classList.add('active');
+  ['board','my'].forEach(p => document.getElementById('page-'+p).classList.remove('show'));
+  document.getElementById('map-topbar').style.display = name === 'map' ? '' : 'none';
+  document.getElementById('map-area').style.display = name === 'map' ? '' : 'none';
+  document.getElementById('place-card').classList.remove('show');
+  const fab = document.getElementById('fab');
+  if (name === 'board') {
+    document.getElementById('page-board').classList.add('show');
+    fab.classList.add('show');
+    renderBoard();
+  } else if (name === 'my') {
+    document.getElementById('page-my').classList.add('show');
+    fab.classList.remove('show');
+  } else {
+    fab.classList.remove('show');
+  }
+}
+
+// ---- Board ----
+function setBoardTab(el, type) {
+  document.querySelectorAll('.board-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  renderBoard(type);
+}
+
+function renderBoard(filter = 'all') {
+  const list = document.getElementById('board-list');
+  const filtered = filter === 'all' ? posts : posts.filter(p => p.type === filter);
+  list.innerHTML = filtered.map(p => `
+    <div class="post-card">
+      <div class="post-header">
+        <div class="post-avatar">${p.emoji}</div>
+        <div>
+          <div class="post-user">${p.user}</div>
+        </div>
+        <div class="post-time">${p.time}</div>
+      </div>
+      <div class="post-title">${p.title}</div>
+      <div class="post-body">${p.body}</div>
+      <div class="post-location">📍 ${p.location}</div>
+      <div class="post-footer">
+        <button class="post-action" onclick="likePost(this, ${p.likes})">❤️ ${p.likes}</button>
+        <button class="post-action">💬 ${p.comments}</button>
+        <button class="post-action" onclick="showToast('공유 링크 복사!')">🔗 공유</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function likePost(btn, count) {
+  btn.textContent = '❤️ ' + (count + 1);
+  btn.style.color = 'var(--accent)';
+}
+
+// ---- Modal ----
+function openModal() {
+  document.getElementById('modal-overlay').classList.add('show');
+}
+function closeModal() {
+  document.getElementById('modal-overlay').classList.remove('show');
+}
+function setRisk(level) {
+  ['high','mid','low'].forEach(l => {
+    document.getElementById('risk-'+l).className = 'risk-btn';
+  });
+  document.getElementById('risk-'+level).className = 'risk-btn selected-'+level;
+  selectedRisk = level;
+}
+function submitPost() {
+  const place = document.getElementById('modal-place').value;
+  const body = document.getElementById('modal-body').value;
+  if (!place) { showToast('장소명을 입력해주세요!'); return; }
+  closeModal();
+  showToast('제보 완료! 솔로들에게 도움이 될 거예요 💔');
+  document.getElementById('modal-place').value = '';
+  document.getElementById('modal-body').value = '';
+  selectedRisk = null;
+  ['high','mid','low'].forEach(l => document.getElementById('risk-'+l).className = 'risk-btn');
+}
+
+// ---- Toast ----
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+// ---- Kakao Map ----
+const PLACES_DATA = [
+  { lat: 37.5284, lng: 126.9336, title: '한강공원 여의도', idx: 0, level: 'danger' },
+  { lat: 37.5563, lng: 126.9236, title: '홍대 걷고싶은거리', idx: 1, level: 'warn' },
+  { lat: 37.5006, lng: 127.0367, title: '혼밥성지 우동가게', idx: 2, level: 'safe' },
+  { lat: 37.5496, lng: 126.9138, title: '북카페 솔로존', idx: 3, level: 'safe' },
+  { lat: 37.5112, lng: 127.0980, title: '롯데월드', idx: 4, level: 'danger' },
+];
+
+const MARKER_COLORS = { danger: '#ff4d6d', warn: '#ff8c42', safe: '#3d9970' };
+const MARKER_ICONS = { danger: '💀', warn: '⚠️', safe: '✅' };
+
+let kakaoMap = null;
+let kakaoMarkers = [];
+let currentFilter = 'all';
+
+function initKakaoMap() {
+  const container = document.getElementById('kakao-map');
+  if (!container || !window.kakao) return;
+  const options = {
+    center: new kakao.maps.LatLng(37.5284, 126.9336),
+    level: 7
+  };
+  kakaoMap = new kakao.maps.Map(container, options);
+  kakaoMap.setMinLevel(3);
+  renderMarkers();
+}
+
+function renderMarkers(filter) {
+  if (!kakaoMap) return;
+  // Remove existing
+  kakaoMarkers.forEach(m => m.setMap(null));
+  kakaoMarkers = [];
+
+  const filtered = filter && filter !== 'all'
+    ? PLACES_DATA.filter(p => p.level === filter || (filter==='food'&&p.level==='safe') || (filter==='cafe'&&p.level==='safe'))
+    : PLACES_DATA;
+
+  filtered.forEach(p => {
+    const color = MARKER_COLORS[p.level];
+    const icon = MARKER_ICONS[p.level];
+    const content = '<div style="position:relative;cursor:pointer;transform:translateX(-50%)">' +
+      '<div style="background:#fff;border-radius:12px;padding:5px 10px;font-size:11px;font-weight:700;' +
+      'box-shadow:0 3px 12px rgba(0,0,0,0.15);border:2px solid ' + color + ';white-space:nowrap;' +
+      'display:flex;align-items:center;gap:4px;font-family:Noto Sans KR,sans-serif">' +
+      '<span style="width:7px;height:7px;border-radius:50%;background:' + color + ';flex-shrink:0;display:inline-block"></span>' +
+      icon + ' ' + p.title +
+      '</div>' +
+      '<div style="width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;' +
+      'border-top:7px solid ' + color + ';margin:0 auto;width:10px"></div>' +
+      '</div>';
+
+    const overlay = new kakao.maps.CustomOverlay({
+      position: new kakao.maps.LatLng(p.lat, p.lng),
+      content: content,
+      yAnchor: 1
+    });
+    overlay.setMap(kakaoMap);
+
+    // Click on overlay
+    overlay.getContent(); // trigger render
+    setTimeout(() => {
+      const el = overlay.a;
+      if (el) el.addEventListener('click', () => showPlace(p.idx));
+    }, 100);
+
+    kakaoMarkers.push(overlay);
+  });
+}
+
+function moveToMyLocation() {
+  if (!navigator.geolocation) { showToast('위치 권한이 없어요'); return; }
+  navigator.geolocation.getCurrentPosition(pos => {
+    const lat = pos.coords.latitude;
+    const lng = pos.coords.longitude;
+    kakaoMap.setCenter(new kakao.maps.LatLng(lat, lng));
+    kakaoMap.setLevel(5);
+    showToast('현재 위치로 이동했어요 📍');
+  }, () => showToast('위치를 가져올 수 없어요'));
+}
+
+function searchPlace() {
+  const keyword = prompt('장소를 검색하세요');
+  if (!keyword) return;
+  const ps = new kakao.maps.services.Places();
+  ps.keywordSearch(keyword, (data, status) => {
+    if (status === kakao.maps.services.Status.OK && data.length > 0) {
+      const lat = parseFloat(data[0].y);
+      const lng = parseFloat(data[0].x);
+      kakaoMap.setCenter(new kakao.maps.LatLng(lat, lng));
+      kakaoMap.setLevel(4);
+      showToast('📍 ' + data[0].place_name);
+    } else {
+      showToast('검색 결과가 없어요');
+    }
+  });
+}
+
+// ---- Init ----
+const topBar = document.getElementById('map-topbar');
+function updateTopH() {
+  const h = topBar.offsetHeight;
+  document.querySelector('.map-area').style.marginTop = h + 'px';
+}
+setTimeout(() => {
+  updateTopH();
+  if (window.kakao && kakao.maps) {
+    kakao.maps.load(initKakaoMap);
+  }
+}, 200);
+</script>
+</body>
+</html>
